@@ -32,6 +32,16 @@ def make_dataset(dir, max_dataset_size=float("inf")):
                 images.append(path)
     return images[:min(max_dataset_size, len(images))]
 
+def get_custom_file_paths(folder, name):
+    image_file_paths = []
+    for root, _, filenames in os.walk(folder):
+        filenames = sorted(filenames)
+        for filename in filenames:
+            if filename == name:
+                file_path = os.path.join(root, filename)
+                image_file_paths.append(file_path)
+    return image_file_paths
+
 
 def default_loader(path):
     return Image.open(path).convert('RGB')
