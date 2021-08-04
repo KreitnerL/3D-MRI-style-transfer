@@ -150,7 +150,11 @@ class BaseModel(ABC):
         visual_ret = OrderedDict()
         for name in self.visual_names:
             if isinstance(name, str):
-                visual_ret[name] = getattr(self, name)
+                tmp = getattr(self, name)
+                if tmp.dim() == 5:
+                    # For 3D data, take a slice along the z-axis
+                    tmp = tmp[:,:,:,:,int(tmp.shape[-1]/2)]
+                visual_ret[name] = tmp
         return visual_ret
 
     def get_current_losses(self):
