@@ -36,7 +36,7 @@ if __name__ == '__main__':
         visualizer.reset()              # reset the visualizer: make sure it saves the results to HTML at least once every epoch
 
         dataset.set_epoch(epoch)
-        pbar = tqdm(dataset)
+        pbar = tqdm(dataset, total=int(len(dataset) / opt.batch_size))
         message = '(epoch: %d)'%epoch
         for i, data in enumerate(pbar):  # inner loop within one epoch
             pbar.set_description(message)
@@ -91,7 +91,7 @@ if __name__ == '__main__':
             iter_data_time = time.time()
 
         validation_loss_array = []
-        for i in range(len(test_dataset)):
+        for i in tqdm(range(int(len(test_dataset) / opt.batch_size)), desc='(epoch %d) Validation'%epoch):
             opt.phase='test'
             tmp = opt.serial_batches
             opt.serial_batches=True

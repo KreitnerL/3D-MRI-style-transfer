@@ -8,11 +8,12 @@ import os
 import numpy as np
 import torch
 import torch.nn.functional as F
+from collections.abc import Sequence
 
 class SpatialRotation():
-    def __init__(self, dim1: int, dim2: int, degree: float = 90.):
-        self.dim1 = dim1
-        self.dim2 = dim2
+    def __init__(self, dimensions: Sequence, degree: Sequence = [90.]):
+        
+        self.dimensions = dimensions
         self.degree = degree
 
     def invert_permutation_numpy2(self, permutation):
@@ -22,9 +23,13 @@ class SpatialRotation():
         return inv
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        permutation = [i for i in range(x.dim()) if (i != self.dim1 and i != self.dim2)] + [self.dim1, self.dim2]
+        if isinstance(self.dimensions[0], Sequence):
+            dim1, dim2 = random.choice(self.dimensions)
+        else:
+            dim1, dim2 = self.dimensions
+        permutation = [i for i in range(x.dim()) if (i != dim1 and i != dim2)] + [dim1, dim2]
         reverse_permuation = list(self.invert_permutation_numpy2(permutation))
-        x = transforms.functional.rotate(x.permute(permutation), self.degree).permute(reverse_permuation)
+        x = transforms.functional.rotate(x.permute(permutation), random.choice(self.degree)).permute(reverse_permuation)
         return x
 
 class MRIDataset(BaseDataset):
@@ -39,14 +44,19 @@ class MRIDataset(BaseDataset):
             transforms.Lambda(lambda x: resize(x, (64,64,75), order=1, anti_aliasing=True)),
             transforms.Lambda(lambda x: self.toGrayScale(x)),
             transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float32)),
-            SpatialRotation(0,1),
             transforms.Lambda(lambda x: x.unsqueeze(0)),
             transforms.Lambda(lambda x: self.center(x, opt.mean, opt.std)),
             transforms.Lambda(lambda x: F.pad(x, (0,1,0,0,0,0), mode='constant', value=0)),
         ]
 
         if(opt.phase == 'train'):
-            transformations += [transforms.RandomHorizontalFlip(), transforms.RandomVerticalFlip()]
+            transformations += [
+                SpatialRotation([(1,2), (1,3), (2,3)], [0,90,180,270]),
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomVerticalFlip()
+            ]
+        else:
+            transformations += [SpatialRotation((1,2))]
         self.transform = transforms.Compose(transformations)
 
     def toGrayScale(self, x):
