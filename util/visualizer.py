@@ -91,6 +91,10 @@ class Visualizer():
         with open(self.log_name, "a") as log_file:
             now = time.strftime("%c")
             log_file.write('================ Training Loss (%s) ================\n' % now)
+        self.val_loss_log_name = os.path.join(opt.checkpoints_dir, opt.name, 'val_loss_log.txt')
+        with open(self.val_loss_log_name, "a") as log_file:
+            now = time.strftime("%c")
+            log_file.write('================ Validation Loss (%s) ================\n' % now)
 
     def reset(self):
         """Reset the self.saved status"""
@@ -239,4 +243,52 @@ class Visualizer():
 
         print(message)  # print the message
         with open(self.log_name, "a") as log_file:
+            log_file.write('%s\n' % message)  # save the message
+
+    def plot_current_validation_losses(self, epoch, loss):
+        """display the current validation losses on visdom display: dictionary of error labels and values
+
+        Parameters:
+            epoch (int)           -- current epoch
+            counter_ratio (float) -- progress (percentage) in the current epoch, between 0 to 1
+            losses (OrderedDict)  -- training losses stored in the format of (name, float) pairs
+        """
+
+        plot_name = 'validation_loss'
+
+        if plot_name not in self.plot_data:
+            self.plot_data[plot_name] = {'X': [], 'Y': [], 'legend': ['validation loss']}
+
+        plot_data = self.plot_data[plot_name]
+        plot_id = list(self.plot_data.keys()).index('validation_loss')
+
+        plot_data['X'].append(epoch*1.)
+        plot_data['Y'].append(loss)
+        try:
+            self.vis.line(
+                X=np.array(plot_data['X']),
+                Y=np.array(plot_data['Y']),
+                opts={
+                    'title': self.name,
+                    'legend': plot_data['legend'],
+                    'xlabel': 'epoch',
+                    'ylabel': 'val_loss'},
+                win=self.display_id - plot_id)
+        except VisdomExceptionBase:
+            self.create_visdom_connections()
+
+    def print_and_get_loss_message(self, epoch, iters, losses, t_comp, t_data):
+        message1 = '(epoch: %d, iters: %d, time: %.3f, data: %.3f) ' % (epoch, iters, t_comp, t_data)
+        message2 = '(epoch: %d) '%epoch
+        for k, v in losses.items():
+            message1 += '%s: %.3f ' % (k, v)
+            message2 += '%s: %.3f ' % (k, v)
+
+        with open(self.log_name, "a") as log_file:
+            log_file.write('%s\n' % message1)  # save the message
+        return message2
+
+    def print_validation_loss(self, epoch, loss):
+        message = 'Validation loss epoch %d: %.3f'%(epoch, loss)
+        with open(self.val_loss_log_name, "a") as log_file:
             log_file.write('%s\n' % message)  # save the message

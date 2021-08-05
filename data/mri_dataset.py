@@ -9,11 +9,29 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+class SpatialRotation():
+    def __init__(self, dim1: int, dim2: int, degree: float = 90.):
+        self.dim1 = dim1
+        self.dim2 = dim2
+        self.degree = degree
+
+    def invert_permutation_numpy2(self, permutation):
+        # https://stackoverflow.com/a/55737198
+        inv = np.empty_like(permutation)
+        inv[permutation] = np.arange(len(inv), dtype=inv.dtype)
+        return inv
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        permutation = [i for i in range(x.dim()) if (i != self.dim1 and i != self.dim2)] + [self.dim1, self.dim2]
+        reverse_permuation = list(self.invert_permutation_numpy2(permutation))
+        x = transforms.functional.rotate(x.permute(permutation), self.degree).permute(reverse_permuation)
+        return x
+
 class MRIDataset(BaseDataset):
     def __init__(self, opt):
         super().__init__(opt)
         self.A_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, opt.phase + 'T1'), 't1.nii.gz'))
-        self.B_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, opt.phase + 'T2'), 't2.nii.gz'))
+        self.B_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, opt.phase + 'T3'), 't3.nii.gz'))
         self.A_size = len(self.A_paths)  # get the size of dataset A
         self.B_size = len(self.B_paths)  # get the size of dataset B
 
@@ -21,12 +39,13 @@ class MRIDataset(BaseDataset):
             transforms.Lambda(lambda x: resize(x, (64,64,75), order=1, anti_aliasing=True)),
             transforms.Lambda(lambda x: self.toGrayScale(x)),
             transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float32)),
+            SpatialRotation(0,1),
             transforms.Lambda(lambda x: x.unsqueeze(0)),
             transforms.Lambda(lambda x: self.center(x, opt.mean, opt.std)),
             transforms.Lambda(lambda x: F.pad(x, (0,1,0,0,0,0), mode='constant', value=0)),
         ]
 
-        if(opt.isTrain):
+        if(opt.phase == 'train'):
             transformations += [transforms.RandomHorizontalFlip(), transforms.RandomVerticalFlip()]
         self.transform = transforms.Compose(transformations)
 
