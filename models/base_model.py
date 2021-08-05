@@ -99,6 +99,8 @@ class BaseModel(ABC):
             self.load_networks(load_suffix)
 
         self.print_networks(opt.verbose)
+        if self.opt.phase=="train":
+            self.save_network_architecture()
 
     def parallelize(self):
         for name in self.model_names:
@@ -244,6 +246,19 @@ class BaseModel(ABC):
                     print(net)
                 print('[Network %s] Total number of parameters : %.3f M' % (name, num_params / 1e6))
         print('-----------------------------------------------')
+
+    def save_network_architecture(self):
+        networks = [getattr(self, 'net' + name) for name in self.model_names]
+        save_filename = 'architecture.txt'
+        save_path = os.path.join(self.save_dir, save_filename)
+
+        architecture = ''
+        for n in networks:
+            architecture += str(n) + '\n'
+        with open(save_path, 'w') as f:
+            f.write(architecture)
+            f.flush()
+            f.close()
 
     def set_requires_grad(self, nets, requires_grad=False):
         """Set requies_grad=Fasle for all the networks to avoid unnecessary computations
