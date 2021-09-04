@@ -41,12 +41,12 @@ class MRIDataset(BaseDataset):
         self.B_size = len(self.B_paths)  # get the size of dataset B
 
         transformations = [
-            transforms.Lambda(lambda x: resize(x, (64,64,75), order=1, anti_aliasing=True)),
+            # transforms.Lambda(lambda x: resize(x, (64,64,75), order=1, anti_aliasing=True)),
             transforms.Lambda(lambda x: self.toGrayScale(x)),
             transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float32)),
             transforms.Lambda(lambda x: x.unsqueeze(0)),
             transforms.Lambda(lambda x: self.center(x, opt.mean, opt.std)),
-            transforms.Lambda(lambda x: F.pad(x, (0,1,0,0,0,0), mode='constant', value=0)),
+            transforms.Lambda(lambda x: F.pad(x, (2,2,0,0,0,0), mode='constant', value=0)),
         ]
 
         if(opt.phase == 'train'):

@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import init
 import functools
+from torch.nn.modules.batchnorm import BatchNorm2d, BatchNorm3d
 from torch.nn.modules.padding import ConstantPad3d
 from torch.optim import lr_scheduler
 import numpy as np
@@ -12,6 +13,8 @@ from .stylegan_networks import StyleGAN2Discriminator, StyleGAN2Generator, TileS
 dimensions = 2
 conv = nn.Conv2d
 convTranspose = nn.ConvTranspose2d
+batchNorm = nn.BatchNorm2d
+avgPool = nn.AvgPool2d
 
 convOptions = {
     2: nn.Conv2d,
@@ -22,11 +25,24 @@ convTransposeOptions = {
     3: nn.ConvTranspose3d
 }
 
+avgPoolOptions =  {
+    2: nn.AvgPool2d,
+    3: nn.AvgPool3d
+}
+
+batchNormOptions = {
+    2: BatchNorm2d,
+    3: BatchNorm3d
+}
+
 def setDimensions(dim: int):
-    global dimensions, conv, convTranspose
+    global dimensions, conv, convTranspose, batchNorm, avgPool
     dimensions = dim
     conv = convOptions[dimensions]
     convTranspose = convTransposeOptions[dimensions]
+    batchNorm = batchNormOptions[dimensions]
+    avgPool = avgPoolOptions[dimensions]
+
 
 
 
@@ -314,6 +330,8 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
 
     if netG == 'resnet':
         net = ResnetGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, no_antialias=no_antialias, no_antialias_up=no_antialias_up, n_blocks=opt.ngl, opt=opt)
+    elif netG == 'obelisk':
+        net = ObeliskHybrid(output_nc, gpu_ids=opt.gpu_ids)
     elif netG == 'unet_128':
         net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
     elif netG == 'unet_256':
@@ -1469,3 +1487,137 @@ class GroupedChannelNorm(nn.Module):
         std = x.std(dim=2, keepdim=True)
         x_norm = (x - mean) / (std + 1e-7)
         return x_norm.view(*shape)
+
+
+class ObeliskLayer(nn.Module):
+    """
+    Taken from https://github.com/mattiaspaul/OBELISK
+    Defines the OBELISK layer that performs deformable convolution with the given number of trainable spatial offsets and a 5 layer 1x1 Dense-Net. The tensor after this layer will be interpolated the input tensor shape using trilinear interpolation
+    """
+    def __init__(self, C_out: int, gpu_ids: list, down_scale_factor: int=2, num_spacial_filter_offsets: int = 1024, C_mid: int = 128, init_type='xavier'):
+        """
+        Creates an OBELISK layer that performs deformable convolution with the given number of trainable spatial offsets and a 5 layer 1x1 Dense-Net. The tensor after this layer will be interpolated the input tensor shape using trilinear interpolation
+
+        Parameters:
+        ----------
+            - C_out (int): Number of Output channels
+            - full_res: list
+        """
+        super().__init__()
+        C = num_spacial_filter_offsets
+        self.down_scale_factor = down_scale_factor
+        self.gpu_ids = gpu_ids
+        self.init_type = init_type
+        self.grid_initialized = False
+        self.sample_grid = None
+        
+        
+        # Obelisk N=1 variant offsets: 1x #offsets x1xNx3
+        self.offset = nn.Parameter(torch.randn(1,C,*[1]*(dimensions-1),3)*0.05)
+        
+        obelisk_channels = 64
+        # Dense-Net with 1x1x1 kernels
+        self.conv1 = nn.Sequential(batchNorm(obelisk_channels), conv(obelisk_channels,C_mid,1,groups=4,bias=False), nn.ReLU(True))
+        # self.conv2 = nn.Sequential(batchNorm(128), conv(128,32,1,bias=False), nn.ReLU(True))
+        self.conv3a = nn.Sequential(batchNorm(C_mid), conv(C_mid,32,1,bias=False), nn.ReLU(True))
+        self.conv3b = nn.Sequential(batchNorm(C_mid+32), conv(C_mid+32,32,1,bias=False), nn.ReLU(True))
+        self.conv3c = nn.Sequential(batchNorm(C_mid+64), conv(C_mid+64,32,1,bias=False), nn.ReLU(True))
+        self.conv3d = nn.Sequential(batchNorm(C_mid+96), conv(C_mid+96,32,1,bias=False), nn.ReLU(True))
+        self.conv4 = nn.Sequential(batchNorm(C_mid+128), conv(C_mid+128,C_out,1,bias=False), nn.ReLU(True))
+
+    def create_grid(self, full_res):
+        self.full_res = list(map(lambda x: int(x/self.down_scale_factor), full_res))
+        self.half_res = list(map(lambda x: int(x/(self.down_scale_factor*2)), full_res))
+        self.quarter_res = list(map(lambda x: int(x/(self.down_scale_factor*4)), full_res))
+        # Obelisk sample_grid: 1 x 1 x #samples x 1 x 3
+        sample_grid = F.affine_grid(torch.eye(3,4).unsqueeze(0), torch.Size((1,1,*self.quarter_res))).view(1,1,-1,*[1]*(dimensions-2),3).detach()
+        sample_grid.requires_grad = False
+        if len(self.gpu_ids) > 0:
+            sample_grid = sample_grid.to(self.gpu_ids[0])
+        setattr(self, 'sample_grid', sample_grid)
+        init_net(self, self.init_type, gpu_ids=self.gpu_ids)
+        self.grid_initialized = True
+
+    def forward(self, x: torch.Tensor):
+        if not self.grid_initialized:
+            self.create_grid(x.shape[2:])
+        B = x.size()[0]
+        device = x.device
+
+        # Obelisk Layer
+        x = F.grid_sample(x, (self.sample_grid.to(device).repeat(B,1,*[1]*dimensions) + self.offset), align_corners=True).view(B,-1,*self.half_res)
+        x = self.conv1(x)
+        # x = self.conv2(x)
+
+        # Dense-Net with 1x1x1 kernels
+        x = torch.cat([x, self.conv3a(x)], dim=1)
+        x = torch.cat([x, self.conv3b(x)], dim=1)
+        x = torch.cat([x, self.conv3c(x)], dim=1)
+        x = torch.cat([x, self.conv3d(x)], dim=1)
+        x = self.conv4(x)
+        x = F.interpolate(x, size=self.full_res, mode='trilinear', align_corners=False)
+        return x
+
+class ObeliskHybrid(nn.Module):
+    """
+    Taken from https://github.com/mattiaspaul/OBELISK
+    Hybrid OBELISK CNN model that contains two obelisk layers combined with traditional CNNs the layers have 512 and 128 trainable offsets and 230k trainable weights in total
+    """
+    def __init__(self, C_out: int, gpu_ids: list, init_type='xavier'):
+        super().__init__()
+        self.obelisk_initialized = False
+        self.gpu_ids = gpu_ids
+        self.init_type = init_type
+
+        #U-Net Encoder
+        leakage = 0.05
+        self.conv2 = conv(16, 32, 3, stride=2, padding=1)
+        self.batch2 = batchNorm(32)
+
+        #U-Net Decoder 
+        self.conv6bU = conv(64, 32, 3, padding=1)
+        self.batch6bU = batchNorm(32)
+        self.conv6U = conv(64+16, 32, 3, padding=1)
+        self.batch6U = batchNorm(32)
+        self.conv8 = conv(32, C_out, 1)
+
+        obelisk1 = ObeliskLayer(32, self.gpu_ids, down_scale_factor=4, num_spacial_filter_offsets=512, C_mid=128)
+        obelisk2 = ObeliskLayer(32, self.gpu_ids, down_scale_factor=2, num_spacial_filter_offsets=128, C_mid=128)
+        self.model0 = nn.Sequential(avgPool(3, padding=1, stride=1), obelisk1)
+        self.model1 = nn.Sequential(conv(1, 4, 3, padding=1), batchNorm(4), nn.LeakyReLU(leakage))
+        self.model10 = obelisk2
+        self.model11 = nn.Sequential(
+            conv(4, 16, 3, stride=2, padding=1),
+            batchNorm(16),
+            nn.LeakyReLU(leakage),
+            conv(16, 16, 3, padding=1),
+            batchNorm(16),
+            nn.LeakyReLU(leakage)
+        )
+        self.model110 = nn.Sequential(
+            conv(16, 32, 3, stride=2, padding=1),
+            batchNorm(32),
+            nn.LeakyReLU(leakage),
+        )
+
+    def forward(self, x: torch.Tensor):
+        size = x.size()
+        if not hasattr(self, 'half_res'):
+            self.half_res = list(map(lambda x: int(x/2), size[2:]))
+        leakage = 0.05 #leaky ReLU used for conventional CNNs
+
+        x0 = self.model0(x)
+        x1 = self.model1(x)
+        x10 = self.model10(x1)
+        x11 = self.model11(x1)
+        x110 = self.model110(x11)
+        torch.cuda.empty_cache()
+
+        #unet-decoder
+        x = F.leaky_relu(self.batch6bU(self.conv6bU(torch.cat((x0,x110),1))),leakage)
+        x = F.interpolate(x, size=self.half_res, mode='trilinear', align_corners=False)
+        x = F.leaky_relu(self.batch6U(self.conv6U(torch.cat((x,x10,x11),1))),leakage)
+        x = self.conv8(x)
+        x = F.interpolate(x, size=size[2:], mode='trilinear', align_corners=False)
+        
+        return x
