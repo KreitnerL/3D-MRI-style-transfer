@@ -144,8 +144,10 @@ def get_pad_layer(pad_type):
     if(pad_type in ['refl', 'reflect']):
         if dimensions == 2:
             PadLayer = nn.ReflectionPad2d
-        else:
+        elif hasattr(nn, 'ReflectionPad3d'):
             PadLayer = nn.ReflectionPad3d
+        else:
+            PadLayer = ZeroPad3d
     elif(pad_type in ['repl', 'replicate']):
         if dimensions == 2:
             PadLayer = nn.ReplicationPad2d
@@ -155,7 +157,7 @@ def get_pad_layer(pad_type):
         if dimensions == 2:
             PadLayer = nn.ZeroPad2d
         else:
-            PadLayer = ZeroPad3d()
+            PadLayer = ZeroPad3d
     else:
         print('Pad type [%s] not recognized' % pad_type)
     return PadLayer
