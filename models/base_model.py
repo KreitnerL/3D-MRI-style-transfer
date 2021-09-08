@@ -147,7 +147,7 @@ class BaseModel(ABC):
         lr = self.optimizers[0].param_groups[0]['lr']
         print('learning rate = %.7f' % lr)
 
-    def get_current_visuals(self):
+    def get_current_visuals(self, slice=True):
         """Return visualization images. train.py will display these images with visdom, and save the images to a HTML"""
         visual_ret = OrderedDict()
         for name in self.visual_names:
@@ -155,7 +155,8 @@ class BaseModel(ABC):
                 tmp = getattr(self, name)
                 if tmp.dim() == 5:
                     # For 3D data, take a slice along the z-axis
-                    tmp = tmp[:,:,:,:,int(tmp.shape[-1]/2)]
+                    if slice:
+                        tmp = tmp[:,:,:,:,int(tmp.shape[-1]/2)]
                 visual_ret[name] = tmp
         return visual_ret
 
@@ -248,13 +249,17 @@ class BaseModel(ABC):
         print('-----------------------------------------------')
 
     def save_network_architecture(self):
-        networks = [getattr(self, 'net' + name) for name in self.model_names]
+        networks = [(name, getattr(self, 'net' + name)) for name in self.model_names]
         save_filename = 'architecture.txt'
         save_path = os.path.join(self.save_dir, save_filename)
 
         architecture = ''
-        for n in networks:
+        for name, n in networks:
             architecture += str(n) + '\n'
+            num_params = 0
+            for param in n.parameters():
+                num_params += param.numel()
+            architecture += '[Network %s] Total number of parameters : %.3f M\n' % (name, num_params / 1e6)
         with open(save_path, 'w') as f:
             f.write(architecture)
             f.flush()

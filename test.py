@@ -30,7 +30,7 @@ import os
 from options.test_options import TestOptions
 from data import create_dataset
 from models import create_model
-from util.visualizer import save_images
+from util.visualizer import save_3D_images, save_images
 from util import html
 import util.util as util
 
@@ -66,5 +66,6 @@ if __name__ == '__main__':
         img_path = model.get_image_paths()     # get image paths
         if i % 5 == 0:  # save images to an HTML file
             print('processing (%04d)-th image... %s' % (i, img_path))
-        save_images(webpage, visuals, img_path, width=opt.display_winsize)
+        save_images(webpage, visuals, img_path, width=opt.display_winsize, mean=opt.mean, std=opt.std)
+        save_3D_images(webpage, model.get_current_visuals(slice=False), img_path)
     webpage.save()  # save the HTML
