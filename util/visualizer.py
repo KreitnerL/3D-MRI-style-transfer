@@ -12,7 +12,7 @@ else:
     VisdomExceptionBase = ConnectionError
 
 
-def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256):
+def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256, mean=127.5, std=30):
     """Save images to the disk.
 
     Parameters:
@@ -32,7 +32,7 @@ def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256):
     ims, txts, links = [], [], []
 
     for label, im_data in visuals.items():
-        im = util.tensor2im(im_data)
+        im = util.tensor2im(im_data, mean, std)
         image_name = '%s/%s.png' % (label, name)
         os.makedirs(os.path.join(image_dir, label), exist_ok=True)
         save_path = os.path.join(image_dir, image_name)
@@ -42,6 +42,17 @@ def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256):
         links.append(image_name)
     webpage.add_images(ims, txts, links, width=width)
 
+def save_3D_images(webpage, visuals, image_path: str):
+    image_dir = webpage.get_image_dir()
+    short_path = ntpath.basename(image_path[0])
+    name = os.path.splitext(short_path)[0]
+    for label, im_data in visuals.items():
+        if 'fake' not in label:
+            continue
+        image_name = '%s/%s' % (label, name)
+        os.makedirs(os.path.join(image_dir, label), exist_ok=True)
+        save_path = os.path.join(image_dir, image_name)
+        util.save_nifti_image(im_data, save_path)
 
 class Visualizer():
     """This class includes several functions that can display/save images and print/save logging information.
