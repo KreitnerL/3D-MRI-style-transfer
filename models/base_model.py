@@ -249,13 +249,17 @@ class BaseModel(ABC):
         print('-----------------------------------------------')
 
     def save_network_architecture(self):
-        networks = [getattr(self, 'net' + name) for name in self.model_names]
+        networks = [(name, getattr(self, 'net' + name)) for name in self.model_names]
         save_filename = 'architecture.txt'
         save_path = os.path.join(self.save_dir, save_filename)
 
         architecture = ''
-        for n in networks:
+        for name, n in networks:
             architecture += str(n) + '\n'
+            num_params = 0
+            for param in n.parameters():
+                num_params += param.numel()
+            architecture += '[Network %s] Total number of parameters : %.3f M\n' % (name, num_params / 1e6)
         with open(save_path, 'w') as f:
             f.write(architecture)
             f.flush()

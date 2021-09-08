@@ -19,14 +19,15 @@ def make_dataset(dir, max_dataset_size=float("inf")):
 
     for root, _, fnames in sorted(os.walk(dir, followlinks=True)):
         for fname in fnames:
-            if fname == 't1.nii.gz':
+            fname: str
+            if fname.endswith('t1.nii.gz'):
                 path = os.path.join(root, fname)
                 images.append(path)
     return images[:min(max_dataset_size, len(images))]
 
 distribution = Counter({i: 0. for i in range(256)})
 
-img_folder = '/media/data_4T/linus/data_MRI_multi'
+img_folder = '/home/kreitnerl/Datasets/3D_brain_mri/trainT1'
 dataset = natural_sort(make_dataset(img_folder))
 # for img_path in dataset:
 #     if int(img_path.split('.')[0].split('/')[-1]) < 774:
@@ -34,6 +35,7 @@ dataset = natural_sort(make_dataset(img_folder))
 for img_path in tqdm(dataset):
 
     a = np.array(nib.load(img_path).get_fdata())
+    a = a[48:240,80:240,36:260]
     a_min = np.amin(a)
     a_max = np.amax(a)
     a = (a - a_min) / a_max * 255.
