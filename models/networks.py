@@ -332,7 +332,7 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
     if netG == 'resnet':
         net = ResnetGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, no_antialias=no_antialias, no_antialias_up=no_antialias_up, n_blocks=opt.ngl, opt=opt)
     elif netG == 'obelisk':
-        net = ObeliskHybridGenerator(output_nc)
+        net = ObeliskHybridGenerator(output_nc, opt.mean, opt.std)
         # net = obeliskhybrid_visceral(1, [208,160,232])
     elif netG == 'unet_128':
         net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
@@ -1579,10 +1579,12 @@ class ObeliskHybridGenerator(nn.Module):
     Taken from https://github.com/mattiaspaul/OBELISK
     Hybrid OBELISK CNN model that contains two obelisk layers combined with traditional CNNs the layers have 512 and 128 trainable offsets and 230k trainable weights in total
     """
-    def __init__(self, C_out: int, init_type='xavier'):
+    def __init__(self, C_out: int, mean: float, std: float, init_type='xavier'):
         super().__init__()
         self.obelisk_initialized = False
         self.init_type = init_type
+        self.mean = mean
+        self.std = std
 
         #U-Net Encoder
         leakage = 0.05
@@ -1615,7 +1617,7 @@ class ObeliskHybridGenerator(nn.Module):
             nn.LeakyReLU(leakage),
         )
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor, layers=[], encode_only=False):
         size = x.size()
         if not hasattr(self, 'half_res'):
             self.half_res = list(map(lambda x: int(x/2), size[2:]))
@@ -1634,7 +1636,17 @@ class ObeliskHybridGenerator(nn.Module):
         x = F.leaky_relu(self.batch6U(self.conv6U(torch.cat((x,x10,x11),1))),leakage)
         x = self.conv8(x)
         x = F.interpolate(x, size=size[2:], mode='trilinear', align_corners=False)
+
+        all_feats = [x0, x1, x10, x11, x110]
+        if encode_only:
+            feats = []
+            for i,feat in enumerate(all_feats):
+                if i in layers:
+                    feats.append(feat)
+            return feats
         
+        x = ((x+1)/2)*255.
+        x = (x-self.mean) / self.std
         return x
 
 #Hybrid OBELISK CNN model that contains two obelisk layers combined with traditional CNNs
