@@ -8,6 +8,7 @@ import importlib
 import argparse
 from argparse import Namespace
 import torchvision
+import nibabel as nib
 
 
 def str2bool(v):
@@ -100,14 +101,12 @@ def save_image(image_numpy, image_path, aspect_ratio=1.0):
         image_pil = image_pil.resize((int(h / aspect_ratio), w), Image.BICUBIC)
     image_pil.save(image_path)
 
-def save_mri_image(image_numpy, image_path, scaling=1.0):
+def save_nifti_image(image_tensor: torch.Tensor, image_path):
     """
     Save a MRI numpy image to the disk. Resize the image by a scaling factor and enforce an aspect ratio of 1
     """
-    image_pil = Image.fromarray(image_numpy)
-    w = min(image_numpy.shape)*scaling
-    image_pil = image_pil.resize((w,w), Image.BICUBIC)
-    image_pil.save(image_path)
+    new_img = nib.Nifti1Image(image_tensor.detach().cpu().numpy()[0,0,:,:,:], np.eye(4))
+    nib.save(new_img, '%s.nii.gz'%image_path)
 
 
 def print_numpy(x, val=True, shp=False):

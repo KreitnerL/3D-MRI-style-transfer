@@ -36,17 +36,19 @@ class MRIDataset(BaseDataset):
     def __init__(self, opt):
         super().__init__(opt)
         self.A_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, opt.phase + 'T1'), 't1.nii.gz'))
-        self.B_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, opt.phase + 'T3'), 't3.nii.gz'))
+        self.B_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, opt.phase + 'T2'), 't2.nii.gz'))
         self.A_size = len(self.A_paths)  # get the size of dataset A
         self.B_size = len(self.B_paths)  # get the size of dataset B
 
         transformations = [
-            transforms.Lambda(lambda x: resize(x, (64,64,75), order=1, anti_aliasing=True)),
+            transforms.Lambda(lambda x: x[48:240,80:240,36:260]), # 192x160x224
+            # transforms.Lambda(lambda x: resize(x, (64,64,75), order=1, anti_aliasing=True)),
+            transforms.Lambda(lambda x: resize(x, (96,80,112), order=1, anti_aliasing=True)),
             transforms.Lambda(lambda x: self.toGrayScale(x)),
             transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float32)),
             transforms.Lambda(lambda x: x.unsqueeze(0)),
             transforms.Lambda(lambda x: self.center(x, opt.mean, opt.std)),
-            transforms.Lambda(lambda x: F.pad(x, (0,1,0,0,0,0), mode='constant', value=0)),
+            # transforms.Lambda(lambda x: F.pad(x, (0,1,0,0,0,0), mode='constant', value=0)),
         ]
 
         if(opt.phase == 'train'):
