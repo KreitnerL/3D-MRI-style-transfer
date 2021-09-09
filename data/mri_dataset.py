@@ -28,11 +28,10 @@ class MRIDataset(BaseDataset):
         self.B_size = len(self.B_paths)  # get the size of dataset B
 
         transformations = [
-            transforms.Lambda(lambda x: x[48:240,80:240,36:260]), # 192x160x224
-            # transforms.Lambda(lambda x: resize(x, (96,80,112), order=1, anti_aliasing=True)),
+            transforms.Lambda(lambda x: x[:,48:240,80:240,36:260]), # 192x160x224
+            transforms.Lambda(lambda x: resize(x, (2,96,80,112), order=1, anti_aliasing=True)),
             transforms.Lambda(lambda x: self.toGrayScale(x)),
             transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float32)),
-            transforms.Lambda(lambda x: x.unsqueeze(0)),
             transforms.Lambda(lambda x: self.center(x, opt.mean, opt.std)),
             # transforms.Lambda(lambda x: F.pad(x, (0,1,0,0,0,0), mode='constant', value=0)),
         ]
@@ -65,8 +64,9 @@ class MRIDataset(BaseDataset):
         B_path = self.B_paths[index_B]
         A_img = np.array(nib.load(A_path).get_fdata())
         B_img = np.array(nib.load(B_path).get_fdata())
-        A = self.transform(A_img)
-        B = self.transform(B_img)
+        AB = self.transform(np.stack([A_img,B_img]))
+        A = AB[0:1]
+        B = AB[1:2]
         return {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path}
 
     def __len__(self):
