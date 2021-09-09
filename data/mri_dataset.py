@@ -11,25 +11,12 @@ import torch.nn.functional as F
 from collections.abc import Sequence
 
 class SpatialRotation():
-    def __init__(self, dimensions: Sequence, degree: Sequence = [90.]):
-        
+    def __init__(self, dimensions: Sequence, k: Sequence = [1]):
         self.dimensions = dimensions
-        self.degree = degree
-
-    def invert_permutation_numpy2(self, permutation):
-        # https://stackoverflow.com/a/55737198
-        inv = np.empty_like(permutation)
-        inv[permutation] = np.arange(len(inv), dtype=inv.dtype)
-        return inv
+        self.k = k
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        if isinstance(self.dimensions[0], Sequence):
-            dim1, dim2 = random.choice(self.dimensions)
-        else:
-            dim1, dim2 = self.dimensions
-        permutation = [i for i in range(x.dim()) if (i != dim1 and i != dim2)] + [dim1, dim2]
-        reverse_permuation = list(self.invert_permutation_numpy2(permutation))
-        x = transforms.functional.rotate(x.permute(permutation), random.choice(self.degree)).permute(reverse_permuation)
+        x = torch.rot90(x, random.choice(self.k), random.choice(self.dimensions))
         return x
 
 class MRIDataset(BaseDataset):
@@ -41,24 +28,22 @@ class MRIDataset(BaseDataset):
         self.B_size = len(self.B_paths)  # get the size of dataset B
 
         transformations = [
-            transforms.Lambda(lambda x: x[48:240,80:240,36:260]), # 192x160x224
-            # transforms.Lambda(lambda x: resize(x, (64,64,75), order=1, anti_aliasing=True)),
-            transforms.Lambda(lambda x: resize(x, (96,80,112), order=1, anti_aliasing=True)),
+            transforms.Lambda(lambda x: x[:,48:240,80:240,36:260]), # 192x160x224
+            transforms.Lambda(lambda x: resize(x, (2,96,80,112), order=1, anti_aliasing=True)),
             transforms.Lambda(lambda x: self.toGrayScale(x)),
             transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float32)),
-            transforms.Lambda(lambda x: x.unsqueeze(0)),
             transforms.Lambda(lambda x: self.center(x, opt.mean, opt.std)),
             # transforms.Lambda(lambda x: F.pad(x, (0,1,0,0,0,0), mode='constant', value=0)),
         ]
 
         if(opt.phase == 'train'):
             transformations += [
-                SpatialRotation([(1,2), (1,3), (2,3)], [0,90,180,270]),
+                SpatialRotation([(1,2), (1,3), (2,3)], [0,1,2,3]),
                 transforms.RandomHorizontalFlip(),
                 transforms.RandomVerticalFlip()
             ]
         else:
-            transformations += [SpatialRotation((1,2))]
+            transformations += [SpatialRotation([(1,2)])]
         self.transform = transforms.Compose(transformations)
 
     def toGrayScale(self, x):
@@ -79,8 +64,9 @@ class MRIDataset(BaseDataset):
         B_path = self.B_paths[index_B]
         A_img = np.array(nib.load(A_path).get_fdata())
         B_img = np.array(nib.load(B_path).get_fdata())
-        A = self.transform(A_img)
-        B = self.transform(B_img)
+        AB = self.transform(np.stack([A_img,B_img]))
+        A = AB[0:1]
+        B = AB[1:2]
         return {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path}
 
     def __len__(self):
