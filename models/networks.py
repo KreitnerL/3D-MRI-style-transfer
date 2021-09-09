@@ -1529,24 +1529,25 @@ class ObeliskLayer(nn.Module):
         self.conv2d = nn.Sequential(batchNorm(C_mid+96), conv(C_mid+96,32,1,bias=False), nn.ReLU(True))
         self.conv3 = nn.Sequential(batchNorm(C_mid+128), conv(C_mid+128,C_out,1,bias=False), nn.ReLU(True))
 
-    def create_grid(self, full_res):
-        self.full_res = list(map(lambda x: int(x/self.down_scale_factor), full_res))
-        self.half_res = list(map(lambda x: int(x/(self.down_scale_factor*2)), full_res))
-        self.quarter_res = list(map(lambda x: int(x/(self.down_scale_factor*4)), full_res))
+    def create_grid(self, quarter_res):
+        
         # Obelisk sample_grid: 1 x 1 x #samples x 1 x 3
-        sample_grid = F.affine_grid(torch.eye(3,4).unsqueeze(0), torch.Size((1,1,*self.quarter_res))).view(1,1,-1,*[1]*(dimensions-2),3).detach()
+        sample_grid = F.affine_grid(torch.eye(3,4).unsqueeze(0), torch.Size((1,1,*quarter_res))).view(1,1,-1,*[1]*(dimensions-2),3).detach()
         sample_grid.requires_grad = False
         setattr(self, 'sample_grid', sample_grid)
         self.grid_initialized = True
 
     def forward(self, x: torch.Tensor):
+        half_res = list(map(lambda x: int(x/(self.down_scale_factor*2)), x.shape[2:]))
+        quarter_res = list(map(lambda x: int(x/(self.down_scale_factor*4)), x.shape[2:]))
+
         if not self.grid_initialized:
-            self.create_grid(x.shape[2:])
+            self.create_grid(quarter_res)
         B = x.size()[0]
         device = x.device
 
         # Obelisk Layer
-        x = F.grid_sample(x, (self.sample_grid.to(device).repeat(B,1,*[1]*dimensions) + self.offset), align_corners=True).view(B,-1,*self.quarter_res)
+        x = F.grid_sample(x, (self.sample_grid.to(device).repeat(B,1,*[1]*dimensions) + self.offset), align_corners=True).view(B,-1,*quarter_res)
         x = self.conv1(x)
         # x = self.conv2(x)
 
@@ -1557,7 +1558,7 @@ class ObeliskLayer(nn.Module):
         x = torch.cat([x, self.conv2d(x)], dim=1)
         x = self.conv3(x)
         if self.upscale:
-            x = F.interpolate(x, size=self.half_res, mode='trilinear', align_corners=False)
+            x = F.interpolate(x, size=half_res, mode='trilinear', align_corners=False)
         return x
 
 class ObeliskDiscriminator(nn.Module):
@@ -1620,8 +1621,7 @@ class ObeliskHybridGenerator(nn.Module):
 
     def forward(self, x: torch.Tensor, layers=[], encode_only=False):
         size = x.size()
-        if not hasattr(self, 'half_res'):
-            self.half_res = list(map(lambda x: int(x/2), size[2:]))
+        half_res = list(map(lambda x: int(x/2), size[2:]))
         leakage = 0.05 #leaky ReLU used for conventional CNNs
 
         x0 = self.model0(x)
@@ -1631,21 +1631,22 @@ class ObeliskHybridGenerator(nn.Module):
         x110 = self.model110(x11)
         torch.cuda.empty_cache()
 
-        #unet-decoder
-        x = F.leaky_relu(self.batch6bU(self.conv6bU(torch.cat((x0,x110),1))),leakage)
-        x = F.interpolate(x, size=self.half_res, mode='trilinear', align_corners=False)
-        x = F.leaky_relu(self.batch6U(self.conv6U(torch.cat((x,x10,x11),1))),leakage)
-        x = self.conv8(x)
-        x = F.interpolate(x, size=size[2:], mode='trilinear', align_corners=False)
-
-        all_feats = [x0, x1, x10, x11, x110]
         if encode_only:
+            all_feats = [x0, x1, x10, x11, x110]
             feats = []
             for i,feat in enumerate(all_feats):
                 if i in layers:
                     feats.append(feat)
             return feats
-        
+
+        #unet-decoder
+        x = F.leaky_relu(self.batch6bU(self.conv6bU(torch.cat((x0,x110),1))),leakage)
+        x = F.interpolate(x, size=half_res, mode='trilinear', align_corners=False)
+        x = F.leaky_relu(self.batch6U(self.conv6U(torch.cat((x,x10,x11),1))),leakage)
+        x = self.conv8(x)
+        x = F.interpolate(x, size=size[2:], mode='trilinear', align_corners=False)
+        x = torch.tanh(x)
+
         x = ((x+1)/2)*255.
         x = (x-self.mean) / self.std
         return x
