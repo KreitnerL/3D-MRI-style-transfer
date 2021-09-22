@@ -11,8 +11,12 @@ from ray.tune.schedulers.pb2 import PB2
 from ray.tune.trial import ExportFormat
 import numpy as np
 from util.plot_pbt import plotPBT
+import random
+from util.ssim import SSIM
+SEED = random.randint(0,1e6)
 
-validation_loss_fun = torch.nn.L1Loss()
+# validation_loss_fun = torch.nn.L1Loss()
+validation_loss_fun = SSIM()
 
 def update_options(opt: Namespace, update_opts: dict):
     opt = vars(opt)
@@ -37,6 +41,7 @@ def get_score(dataset, opt, model: BaseModel):
     return score
 
 def training_function(config, checkpoint_dir=None):
+    torch.manual_seed(config['seed'])
     opt = update_options(init_opt, config)
     if opt.dimensions == 3:
         setDimensions(3)
@@ -113,6 +118,9 @@ class CustomStopper(tune.Stopper):
         def stop_all(self):
             return self.should_stop
 
+def compute_gpu_load(num_trails):
+    return {"gpu": int(100.0/num_trails)/100.0 }
+
 search_space = {
             "lambda_L1":  [1.0,100.0],
             "lr":  [0.0001, 0.0003]
@@ -120,7 +128,7 @@ search_space = {
 
 PBB = PB2(
     time_attr="training_iteration",
-    perturbation_interval=10,
+    perturbation_interval=5,
     hyperparam_bounds=search_space
 )
 
@@ -130,8 +138,10 @@ os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(list(map(str, init_opt.gpu_ids)))
 init_opt.gpu_ids = [0]
 stopper = CustomStopper()
 BEST_CHECKPOINT_PATH = os.path.join('ray_results/', init_opt.name, 'best')
-STEPS_TO_NEXT_CHECKPOINT = 10
+STEPS_TO_NEXT_CHECKPOINT = 5
 
+start_config = {key: tune.uniform(*val) for key, val in search_space.items()}
+start_config.update({'seed': SEED})
 
 analysis = tune.run(
     training_function,
@@ -140,13 +150,13 @@ analysis = tune.run(
     scheduler=PBB,
     metric="score",
     checkpoint_score_attr="min-score",
-    mode="min",
+    mode="max",
     stop=stopper,
     export_formats=[ExportFormat.MODEL],
-    resources_per_trial={"gpu": 0.3},
+    resources_per_trial=compute_gpu_load(2),
     keep_checkpoints_num=1,
     num_samples=6,
-    config={key: tune.uniform(*val) for key, val in search_space.items()},
+    config=start_config,
     raise_on_failed_trial=False
 )
 
