@@ -41,6 +41,7 @@ if __name__ == '__main__':
         for i, data in enumerate(pbar):  # inner loop within one epoch
             pbar.set_description(message)
             iter_start_time = time.time()  # timer for computation per iteration
+            dataset.dataset.updateDataAugmentation()
             if total_iters % opt.print_freq == 0:
                 t_data = iter_start_time - iter_data_time
 

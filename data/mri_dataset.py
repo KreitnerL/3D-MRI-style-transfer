@@ -11,12 +11,36 @@ import torch.nn.functional as F
 from collections.abc import Sequence
 
 class SpatialRotation():
-    def __init__(self, dimensions: Sequence, k: Sequence = [1]):
+    def __init__(self, dimensions: Sequence, k: Sequence = [1], auto_update=True):
         self.dimensions = dimensions
         self.k = k
+        self.args = None
+        self.auto_update = auto_update
+        self.update()
+
+    def update(self):
+        self.args = (random.choice(self.k), random.choice(self.dimensions))
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        x = torch.rot90(x, random.choice(self.k), random.choice(self.dimensions))
+        if self.auto_update:
+            self.update()
+        x = torch.rot90(x, *self.args)
+        return x
+
+class SpatialFlip():
+    def __init__(self, dims: Sequence, auto_update=True) -> None:
+        self.dims = dims
+        self.args = None
+        self.auto_update = auto_update
+        self.update()
+
+    def update(self):
+        self.args = tuple(random.sample(self.dims, random.choice(range(len(self.dims)))))
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        if self.auto_update:
+            self.update()
+        x = torch.flip(x, self.args)
         return x
 
 class MRIDataset(BaseDataset):
@@ -27,7 +51,7 @@ class MRIDataset(BaseDataset):
         self.A_size = len(self.A_paths)  # get the size of dataset A
         self.B_size = len(self.B_paths)  # get the size of dataset B
 
-        transformations = [
+        self.transformations = [
             transforms.Lambda(lambda x: x[:,48:240,80:240,36:260]), # 192x160x224
             transforms.Lambda(lambda x: resize(x, (2,96,80,112), order=1, anti_aliasing=True)),
             transforms.Lambda(lambda x: self.toGrayScale(x)),
@@ -37,14 +61,13 @@ class MRIDataset(BaseDataset):
         ]
 
         if(opt.phase == 'train'):
-            transformations += [
-                SpatialRotation([(1,2), (1,3), (2,3)], [0,1,2,3]),
-                transforms.RandomHorizontalFlip(),
-                transforms.RandomVerticalFlip()
+            self.transformations += [
+                SpatialRotation([(1,2), (1,3), (2,3)], [0,1,2,3], auto_update=False),
+                SpatialFlip(dims=(1,2,3), auto_update=False),
             ]
         else:
-            transformations += [SpatialRotation([(1,2)])]
-        self.transform = transforms.Compose(transformations)
+            self.transformations += [SpatialRotation([(1,2)])]
+        self.transform = transforms.Compose(self.transformations)
 
     def toGrayScale(self, x):
         x_min = np.amin(x)
@@ -54,6 +77,10 @@ class MRIDataset(BaseDataset):
 
     def center(self, x, mean, std):
         return (x - mean) / std
+
+    def updateDataAugmentation(self):
+        for t in self.transformations[-2:]:
+            t.update()
 
     def __getitem__(self, index):
         A_path = self.A_paths[index % self.A_size]  # make sure index is within then range
