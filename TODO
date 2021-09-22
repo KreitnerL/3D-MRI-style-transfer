@@ -1,11 +1,12 @@
 TODO:
 --------------------
-Check why Pix2Pix fails
-Encode only for Obelisk G
-Better upsampling
+Plateau Stopper
 
 Done:
 --------------------
+Check why Pix2Pix fails
+Encode only for Obelisk G
+Better upsampling
 Intersection mask for T2
 Obelisk D
 Obelisk G

@@ -47,3 +47,4 @@ test/data/legacy_serialized.pt
 .idea
 **/*.code-workspace
 *.nii.gz
+ray_results/

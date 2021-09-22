@@ -42,6 +42,7 @@ class BaseModel(ABC):
         self.optimizers = []
         self.image_paths = []
         self.metric = 0  # used for learning rate policy 'plateau'
+        self.networks = []
 
     @staticmethod
     def dict_grad_hook_factory(add_func=lambda x: x):
@@ -85,6 +86,10 @@ class BaseModel(ABC):
     def optimize_parameters(self):
         """Calculate losses, gradients, and update network weights; called in every training iteration"""
         pass
+
+    def setSchedulers(self, opt):
+        if self.isTrain:
+            self.schedulers = [networks.get_scheduler(optimizer, opt) for optimizer in self.optimizers]
 
     def setup(self, opt):
         """Load and print networks; create schedulers
@@ -280,3 +285,22 @@ class BaseModel(ABC):
 
     def generate_visuals_for_evaluation(self, data, mode):
         return {}
+
+    def load_checkpoint(self, path):
+        checkpoint = torch.load(path)
+        states = checkpoint.pop('networks')
+        for i in range(len(self.networks)):
+            self.networks[i].load_state_dict(states[i])
+        print('Loaded checkpoint successfully')
+        return checkpoint
+
+    def create_checkpoint(self, path, d=None):
+        states = list(map(lambda x: x.cpu().state_dict(), self.networks))
+        checkpoint = {
+            "networks": states
+        }
+        if d is not None:
+            checkpoint.update(d)
+        torch.save(checkpoint, path)
+        for x in self.networks:
+            x.cuda()

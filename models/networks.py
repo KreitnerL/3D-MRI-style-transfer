@@ -299,7 +299,7 @@ def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[], debug=False, i
     return net
 
 
-def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, init_type='normal',
+def define_G(input_nc, output_nc, ngf, netG, norm='instance', use_dropout=False, init_type='normal',
              init_gain=0.02, no_antialias=False, no_antialias_up=False, gpu_ids=[], opt=None):
     """Create a generator
 
@@ -1595,9 +1595,10 @@ class ObeliskResNet(nn.Module):
 class ObeliskDiscriminator(nn.Module):
     def __init__(self, C_in):
         super().__init__()
+        norm = get_norm_layer('instance')
         self.model = nn.Sequential(
             conv(C_in, 4, 3, padding=1),
-            batchNorm(4),
+            norm(4),
             nn.LeakyReLU(0.05),
             ObeliskLayer((4,128,32), down_scale_factor=1, K=128, upscale=False),
             ObeliskLayer((32,128,1), down_scale_factor=1, K=128, upscale=False)
@@ -1617,34 +1618,37 @@ class ObeliskHybridGenerator(nn.Module):
         self.mean = mean
         self.std = std
 
+        norm = get_norm_layer('instance')
+
         #U-Net Encoder
         leakage = 0.05
         self.conv2 = conv(16, 32, 3, stride=2, padding=1)
-        self.batch2 = batchNorm(32)
+        self.batch2 = norm(32)
 
         #U-Net Decoder 
         self.conv6bU = conv(64, 32, 3, padding=1)
-        self.batch6bU = batchNorm(32)
+        self.batch6bU = norm(32)
         self.conv6U = conv(64+16, 32, 3, padding=1)
-        self.batch6U = batchNorm(32)
-        self.conv8 = conv(32, C_out, 1)
+        self.batch6U = norm(32)
+        # self.conv8 = conv(32, C_out, 1)
+        self.conv8 = convTranspose(32, 1, kernel_size=3, stride=2, padding=1, output_padding=1)
 
         obelisk1 = ObeliskLayer((1,128,32), down_scale_factor=2, K=512)
         obelisk2 = ObeliskLayer((4,128,32), down_scale_factor=1, K=128)
         self.model0 = nn.Sequential(avgPool(3, padding=1, stride=1), obelisk1)
-        self.model1 = nn.Sequential(conv(1, 4, 3, padding=1), batchNorm(4), nn.LeakyReLU(leakage))
+        self.model1 = nn.Sequential(conv(1, 4, 3, padding=1), norm(4), nn.LeakyReLU(leakage))
         self.model10 = obelisk2
         self.model11 = nn.Sequential(
             conv(4, 16, 3, stride=2, padding=1),
-            batchNorm(16),
+            norm(16),
             nn.LeakyReLU(leakage),
             conv(16, 16, 3, padding=1),
-            batchNorm(16),
+            norm(16),
             nn.LeakyReLU(leakage)
         )
         self.model110 = nn.Sequential(
             conv(16, 32, 3, stride=2, padding=1),
-            batchNorm(32),
+            norm(32),
             nn.LeakyReLU(leakage),
         )
 
@@ -1672,7 +1676,7 @@ class ObeliskHybridGenerator(nn.Module):
         x = F.interpolate(x, size=half_res, mode='trilinear', align_corners=False)
         x = F.leaky_relu(self.batch6U(self.conv6U(torch.cat((x,x10,x11),1))),leakage)
         x = self.conv8(x)
-        x = F.interpolate(x, size=size[2:], mode='trilinear', align_corners=False)
+        # x = F.interpolate(x, size=size[2:], mode='trilinear', align_corners=False)
         x = torch.tanh(x)
 
         x = ((x+1)/2)*255.

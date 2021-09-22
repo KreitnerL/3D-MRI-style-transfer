@@ -92,10 +92,10 @@ if __name__ == '__main__':
             iter_data_time = time.time()
 
         validation_loss_array = []
+        opt.phase='test'
+        tmp = opt.serial_batches
+        opt.serial_batches=True
         for i in tqdm(range(int(len(test_dataset) / opt.batch_size)), desc='(epoch %d) Validation'%epoch):
-            opt.phase='test'
-            tmp = opt.serial_batches
-            opt.serial_batches=True
             test_data = next(test_dataset_iter, None)
             if test_data is None:
                 test_dataset_iter = iter(test_dataset)
