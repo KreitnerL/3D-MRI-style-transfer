@@ -1,30 +1,35 @@
+from typing import Sequence
 import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
-import numpy as np
 from math import exp
 
 def gaussian(window_size, sigma):
     gauss = torch.Tensor([exp(-(x - window_size//2)**2/float(2*sigma**2)) for x in range(window_size)])
     return gauss/gauss.sum()
 
-def create_window(window_size, channel):
-    _1D_window = gaussian(window_size, 1.5).unsqueeze(1)
-    _2D_window = _1D_window.mm(_1D_window.t()).float().unsqueeze(0).unsqueeze(0)
-    window = Variable(_2D_window.expand(channel, 1, window_size, window_size).contiguous())
-    return window
+def create_window(window_size: int, shape: Sequence = [1,1,1]):
+    channel = shape[1]
+    dim = len(shape)-2
+    _1D_window = gaussian(window_size, 1.5)
+    window = _1D_window
+    _1D_window = _1D_window.unsqueeze(1).t()
+    for _ in range(dim-1):
+        window = torch.matmul(window.unsqueeze(-1), _1D_window).float()
+    return Variable(window.view(1,1,*dim*[window_size]).expand(channel, 1, *dim*[window_size]).contiguous())
 
-def _ssim(img1, img2, window, window_size, channel, size_average = True):
-    mu1 = F.conv2d(img1, window, padding = window_size//2, groups = channel)
-    mu2 = F.conv2d(img2, window, padding = window_size//2, groups = channel)
+def _ssim(img1: torch.Tensor, img2: torch.Tensor, window: Variable, window_size: int, channel: int, size_average = True):
+    conv = F.conv1d if img1.dim()==3 else F.conv2d if img1.dim()==4 else F.conv3d
+    mu1 = conv(img1, window, padding = window_size//2, groups = channel)
+    mu2 = conv(img2, window, padding = window_size//2, groups = channel)
 
     mu1_sq = mu1.pow(2)
     mu2_sq = mu2.pow(2)
     mu1_mu2 = mu1*mu2
 
-    sigma1_sq = F.conv2d(img1*img1, window, padding = window_size//2, groups = channel) - mu1_sq
-    sigma2_sq = F.conv2d(img2*img2, window, padding = window_size//2, groups = channel) - mu2_sq
-    sigma12 = F.conv2d(img1*img2, window, padding = window_size//2, groups = channel) - mu1_mu2
+    sigma1_sq = conv(img1*img1, window, padding = window_size//2, groups = channel) - mu1_sq
+    sigma2_sq = conv(img2*img2, window, padding = window_size//2, groups = channel) - mu2_sq
+    sigma12 = conv(img1*img2, window, padding = window_size//2, groups = channel) - mu1_mu2
 
     C1 = 0.01**2
     C2 = 0.03**2
@@ -42,15 +47,15 @@ class SSIM(torch.nn.Module):
         self.window_size = window_size
         self.size_average = size_average
         self.channel = 1
-        self.window = create_window(window_size, self.channel)
+        self.window = create_window(window_size)
 
-    def forward(self, img1, img2):
-        (_, channel, _, _) = img1.size()
+    def forward(self, img1: torch.Tensor, img2: torch.Tensor):
+        channel = img1.shape[1]
 
-        if channel == self.channel and self.window.data.type() == img1.data.type():
+        if self.window.data.type() == img1.data.type():
             window = self.window
         else:
-            window = create_window(self.window_size, channel)
+            window = create_window(self.window_size, img1.shape)
             
             if img1.is_cuda:
                 window = window.cuda(img1.get_device())
@@ -63,8 +68,8 @@ class SSIM(torch.nn.Module):
         return _ssim(img1, img2, window, self.window_size, channel, self.size_average)
 
 def ssim(img1, img2, window_size = 11, size_average = True):
-    (_, channel, _, _) = img1.size()
-    window = create_window(window_size, channel)
+    channel = img1.shape[1]
+    window = create_window(window_size, img1.shape)
     
     if img1.is_cuda:
         window = window.cuda(img1.get_device())
