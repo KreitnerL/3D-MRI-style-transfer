@@ -34,6 +34,7 @@ class Pix2PixModel(BaseModel):
         if is_train:
             parser.set_defaults(pool_size=0, gan_mode='vanilla', serial_batches="True")
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
+            parser.add_argument('--lambda_ssim', type=float, default=1, help='Coefficient that scales the SSIM loss')
 
         return parser
 
@@ -59,7 +60,7 @@ class Pix2PixModel(BaseModel):
         self.networks = [self.netG]
         if self.isTrain:  # define a discriminator; conditional GANs need to take both input and output images; Therefore, #channels for D is input_nc + output_nc
             self.netD = networks.define_D(opt.input_nc + opt.output_nc, opt.ndf, opt.netD,
-                                          opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, opt.no_antialias, self.gpu_ids, opt)
+                                          opt.n_layers_D, opt.normD, opt.init_type, opt.init_gain, opt.no_antialias, self.gpu_ids, opt)
             self.networks.extend([self.netD])
         if self.isTrain:
             # define loss functions
@@ -67,7 +68,7 @@ class Pix2PixModel(BaseModel):
             ssim = SSIM()
             l1 = torch.nn.L1Loss()
 
-            self.criterionL1 = lambda i1,i2: l1(i1,i2) - ssim(i1,i2)
+            self.criterionL1 = lambda i1,i2: l1(i1,i2) - (opt.lambda_ssim * ssim(i1,i2))
             # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
             self.optimizer_G = torch.optim.Adam(self.netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
             self.optimizer_D = torch.optim.Adam(self.netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))

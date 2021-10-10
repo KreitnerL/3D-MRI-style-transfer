@@ -1518,6 +1518,7 @@ class ObeliskLayer(nn.Module):
         self.sample_grid = None
         self.upscale = upscale
         self.denseNetLayers = denseNetLayers
+        norm=get_norm_layer('instance')
         
         # Obelisk N=1 variant offsets: 1x #offsets x1xNx3
         self.offset = nn.Parameter(torch.randn(1,K,*[1]*(dimensions-1),3)*0.05)
@@ -1528,9 +1529,9 @@ class ObeliskLayer(nn.Module):
         self.denseNet = nn.ModuleList([])
         C = C_mid
         for i in range(denseNetLayers):
-            self.denseNet.append(nn.Sequential(batchNorm(C), conv(C,32,1,bias=False), nn.ReLU(True)))
+            self.denseNet.append(nn.Sequential(norm(C), conv(C,32,1,bias=False), nn.ReLU(True)))
             C+=32
-        self.conv3 = nn.Sequential(batchNorm(C), conv(C,C_out,1,bias=False), nn.ReLU(True))
+        self.conv3 = nn.Sequential(norm(C), conv(C,C_out,1,bias=False), nn.ReLU(True))
 
     def create_grid(self, quarter_res):
         
@@ -1597,11 +1598,13 @@ class ObeliskDiscriminator(nn.Module):
         super().__init__()
         norm = get_norm_layer('instance')
         self.model = nn.Sequential(
-            conv(C_in, 4, 3, padding=1),
-            norm(4),
+            conv(C_in, 64, kernel_size=3, stride=2, padding=1),
+            norm(64),
             nn.LeakyReLU(0.05),
-            ObeliskLayer((4,128,32), down_scale_factor=1, K=128, upscale=False),
-            ObeliskLayer((32,128,1), down_scale_factor=1, K=128, upscale=False)
+            ObeliskLayer((64,128,128), down_scale_factor=1, K=128, upscale=False),
+            norm(128),
+            nn.LeakyReLU(0.05),
+            conv(128, 1, kernel_size=3, stride=1, padding=1),
         )
 
     def forward(self, x: torch.Tensor):

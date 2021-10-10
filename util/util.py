@@ -9,6 +9,8 @@ import argparse
 from argparse import Namespace
 import torchvision
 import nibabel as nib
+import matplotlib.pyplot as plt
+import re
 
 
 def str2bool(v):
@@ -172,3 +174,64 @@ def correct_resize(t, size, mode=Image.BICUBIC):
         resized_t = torchvision.transforms.functional.to_tensor(one_image) * 2 - 1.0
         resized.append(resized_t)
     return torch.stack(resized, dim=0).to(device)
+
+def val_log_2_png(path: str):
+    folder_path = os.path.dirname(path)
+    name = os.path.basename(folder_path)
+    val = []
+    with open(path) as f:
+        lines = [line.rstrip() for line in f]
+    for line in lines:
+        if line.startswith('='):
+            continue
+        val.append(float(line.split(': ')[-1]))
+    plt.figure()
+    plt.plot(val)
+    plt.title(name)
+    plt.xlabel('epoch')
+    plt.ylabel('L1 Loss')
+    plt.legend(['validation loss'])
+    
+    out_path = os.path.join(folder_path, 'val_loss.png')
+    plt.savefig(out_path, format='png', bbox_inches='tight')
+    plt.cla()
+    print('Saved plot at', out_path)
+
+def loss_log_2_png(path: str, dataset_size=234):
+    """
+    Loads the given loss file, extracts all losses and returns them in a struct
+    """
+    legend = []
+    y = []
+    x = []
+    has_legend = False
+    with open(path) as f:
+        lines = [line.rstrip() for line in f]
+    for line in lines:
+        if line.startswith('='):
+            continue
+        meta_data = re.sub('\(|\)|\:|\,', '', re.search('\(.*\)', line).group(0)).split()
+        x_i = int(meta_data[1]) + int(meta_data[3])/234.0
+        line =  re.sub('\(.*\)', '', line)
+        y_i = []
+        for t in line.split():
+            try:
+                y_i.append(float(t))
+            except ValueError:
+                if not has_legend and len(t)>1:
+                    legend.append(t.replace(':', ''))
+        y.append(y_i)
+        x.append(x_i)
+        has_legend=True
+
+    folder_path = os.path.dirname(path)
+    name = os.path.basename(folder_path)
+    plt.figure()
+    plt.plot(x,y)
+    plt.legend(legend)
+    plt.title(name)
+    plt.xlabel('epoch')
+    plt.ylabel('loss')
+    
+    out_path = os.path.join(folder_path, 'train_loss.png')
+    plt.savefig(out_path, format='png', bbox_inches='tight')

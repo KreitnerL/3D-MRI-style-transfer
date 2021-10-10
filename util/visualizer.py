@@ -5,6 +5,7 @@ import ntpath
 import time
 from . import util, html
 from subprocess import Popen, PIPE
+import matplotlib.pyplot as plt
 
 if sys.version_info[0] == 2:
     VisdomExceptionBase = Exception
@@ -102,10 +103,13 @@ class Visualizer():
         with open(self.log_name, "a") as log_file:
             now = time.strftime("%c")
             log_file.write('================ Training Loss (%s) ================\n' % now)
+        self.loss_plot_name = os.path.join(opt.checkpoints_dir, opt.name, 'train_loss.png')
         self.val_loss_log_name = os.path.join(opt.checkpoints_dir, opt.name, 'val_loss_log.txt')
         with open(self.val_loss_log_name, "a") as log_file:
             now = time.strftime("%c")
             log_file.write('================ Validation Loss (%s) ================\n' % now)
+        self.val_plot_name = os.path.join(opt.checkpoints_dir, opt.name, 'val.png')
+
 
     def reset(self):
         """Reset the self.saved status"""
@@ -224,6 +228,14 @@ class Visualizer():
 
         plot_data['X'].append(epoch + counter_ratio)
         plot_data['Y'].append([losses[k] for k in plot_data['legend']])
+        plt.figure(0)
+        plt.plot(plot_data['X'], plot_data['Y'])
+        plt.legend(plot_data['legend'])
+        plt.title(self.opt.name)
+        plt.xlabel('epoch')
+        plt.ylabel('loss')
+        plt.savefig(self.loss_plot_name, format='png', bbox_inches='tight')
+        plt.cla()
         try:
             self.vis.line(
                 X=np.stack([np.array(plot_data['X'])] * len(plot_data['legend']), 1),
@@ -275,6 +287,14 @@ class Visualizer():
 
         plot_data['X'].append(epoch*1.)
         plot_data['Y'].append(loss)
+        plt.figure(1)
+        plt.plot(plot_data['X'], plot_data['Y'])
+        plt.legend(plot_data['legend'])
+        plt.title(self.opt.name)
+        plt.xlabel('epoch')
+        plt.ylabel('L1 loss')
+        plt.savefig(self.val_plot_name, format='png', bbox_inches='tight')
+        plt.cla()
         try:
             self.vis.line(
                 X=np.array(plot_data['X']),

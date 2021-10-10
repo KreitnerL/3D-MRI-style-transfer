@@ -12,11 +12,9 @@ from ray.tune.trial import ExportFormat
 import numpy as np
 from util.plot_pbt import plotPBT
 import random
-from util.ssim import SSIM
 SEED = random.randint(0,1e6)
 
-# validation_loss_fun = torch.nn.L1Loss()
-validation_loss_fun = SSIM()
+validation_loss_fun = torch.nn.L1Loss()
 
 def update_options(opt: Namespace, update_opts: dict):
     opt = vars(opt)
@@ -122,7 +120,6 @@ def compute_gpu_load(num_trails):
     return {"gpu": int(100.0/num_trails)/100.0 }
 
 search_space = {
-            "lambda_L1":  [1.0,100.0],
             "lr":  [0.0001, 0.0003]
         }
 
@@ -153,9 +150,9 @@ analysis = tune.run(
     mode="max",
     stop=stopper,
     export_formats=[ExportFormat.MODEL],
-    resources_per_trial=compute_gpu_load(2),
+    resources_per_trial=compute_gpu_load(3),
     keep_checkpoints_num=1,
-    num_samples=6,
+    num_samples=8,
     config=start_config,
     raise_on_failed_trial=False
 )

@@ -101,7 +101,10 @@ class BaseModel(ABC):
             self.schedulers = [networks.get_scheduler(optimizer, opt) for optimizer in self.optimizers]
         if not self.isTrain or opt.continue_train:
             load_suffix = opt.epoch
-            self.load_networks(load_suffix)
+            if opt.checkpoint_path is not None:
+                self.load_checkpoint(opt.checkpoint_path)
+            else:
+                self.load_networks(load_suffix)
 
         self.print_networks(opt.verbose)
         if self.opt.phase=="train":
