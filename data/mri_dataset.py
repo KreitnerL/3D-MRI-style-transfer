@@ -43,6 +43,18 @@ class SpatialFlip():
         x = torch.flip(x, self.args)
         return x
 
+class PadIfNecessary():
+    def __init__(self, n_downsampling: int):
+        self.n_downsampling = n_downsampling
+        self.mod = 2**self.n_downsampling
+
+    def __call__(self, x):
+        padding = []
+        for dim in reversed(x.shape[1:]):
+            padding.extend([0, self.mod - dim%self.mod])
+        x = F. pad(x, padding)
+        return x
+
 class MRIDataset(BaseDataset):
     def __init__(self, opt):
         super().__init__(opt)
@@ -57,6 +69,7 @@ class MRIDataset(BaseDataset):
             transforms.Lambda(lambda x: self.toGrayScale(x)),
             transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float32)),
             transforms.Lambda(lambda x: self.center(x, opt.mean, opt.std)),
+            PadIfNecessary(3)
             # transforms.Lambda(lambda x: F.pad(x, (0,1,0,0,0,0), mode='constant', value=0)),
         ]
 
@@ -71,7 +84,7 @@ class MRIDataset(BaseDataset):
 
     def toGrayScale(self, x):
         x_min = np.amin(x)
-        x_max = np.amax(x)
+        x_max = np.amax(x) - x_min
         x = (x - x_min) / x_max * 255.
         return x
 
