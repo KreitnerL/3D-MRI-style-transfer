@@ -63,8 +63,9 @@ if __name__ == '__main__':
 
             if total_iters % opt.display_freq == 0:   # display images on visdom and save images to a HTML file
                 opt.phase='test'
-                tmp = opt.serial_batches
+                tmp = opt.serial_batches, opt.paired
                 opt.serial_batches=True
+                opt.paired = True
                 test_data = next(test_dataset_iter, None)
                 if test_data is None:
                     test_dataset_iter = iter(test_dataset)
@@ -73,7 +74,7 @@ if __name__ == '__main__':
                 model.set_input(test_data)
                 model.test()
                 opt.phase='train'
-                opt.serial_batches=tmp
+                opt.serial_batches, opt.paired = tmp
                 save_result = total_iters % opt.update_html_freq == 0
                 visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
 
@@ -93,8 +94,9 @@ if __name__ == '__main__':
 
         validation_loss_array = []
         opt.phase='test'
-        tmp = opt.serial_batches
+        tmp = opt.serial_batches, opt.paired
         opt.serial_batches=True
+        opt.paired = True
         for i in tqdm(range(int(len(test_dataset) / opt.batch_size)), desc='(epoch %d) Validation'%epoch):
             test_data = next(test_dataset_iter, None)
             if test_data is None:
@@ -109,7 +111,7 @@ if __name__ == '__main__':
         visualizer.print_validation_loss(epoch, val_loss)
         visualizer.plot_current_validation_losses(epoch, val_loss)
         opt.phase='train'
-        opt.serial_batches=tmp
+        opt.serial_batches, opt.paired = tmp
 
         if epoch % opt.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
             print('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))

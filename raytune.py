@@ -27,14 +27,15 @@ def update_options(opt: Namespace, update_opts: dict):
 def get_score(dataset, opt, model: BaseModel):
     validation_loss_array = []
     opt.phase='test'
-    tmp = opt.serial_batches
+    tmp = opt.serial_batches, opt.paired
     opt.serial_batches=True
+    opt.paired = True
     for test_data in dataset:
         model.set_input(test_data)
         model.test()
         validation_loss_array.append(validation_loss_fun(model.fake_B, model.real_B).item())
     opt.phase='train'
-    opt.serial_batches=tmp
+    opt.serial_batches, opt.paired = tmp
     score = np.mean(validation_loss_array)
     return score
 

@@ -97,7 +97,7 @@ class MRIDataset(BaseDataset):
 
     def __getitem__(self, index):
         A_path = self.A_paths[index % self.A_size]  # make sure index is within then range
-        if self.opt.serial_batches:   # make sure index is within then range
+        if self.opt.paired:   # make sure index is within then range
             index_B = index % self.B_size
         else:   # randomize the index for domain B to avoid fixed pairs.
             index_B = random.randint(0, self.B_size - 1)
