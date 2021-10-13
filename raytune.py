@@ -42,8 +42,6 @@ def get_score(dataset, opt, model: BaseModel):
 def training_function(config, checkpoint_dir=None):
     torch.manual_seed(config['seed'])
     opt = update_options(init_opt, config)
-    if opt.dimensions == 3:
-        setDimensions(3)
     dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
 
     opt.phase='test'

@@ -4,7 +4,6 @@ from util import util
 import torch
 import models
 import data
-from models.networks import setDimensions
 
 
 class BaseOptions():
@@ -31,7 +30,6 @@ class BaseOptions():
         parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='models are saved here')
         parser.add_argument('--mean', type=float, default=127.5, help='Mean of source dataset')
         parser.add_argument('--std', type=float, default=50, help='Standard Deviation of target dataset')
-        parser.add_argument('--dimensions', type=int, default=2, help='Number of dimensions of the data')
         # model parameters
         parser.add_argument('--model', type=str, default='cut', help='chooses which model to use.')
         parser.add_argument('--input_nc', type=int, default=3, help='# of input image channels: 3 for RGB and 1 for grayscale')
@@ -58,7 +56,6 @@ class BaseOptions():
         parser.add_argument('--paired', action='store_true', help='if true, uses the same index for the A and B sample')
         parser.add_argument('--num_threads', default=4, type=int, help='# threads for loading data')
         parser.add_argument('--batch_size', type=int, default=1, help='input batch size')
-        parser.add_argument('--paired', action='store_true', help='if true, uses the same index for A and B samples')
         parser.add_argument('--load_size', type=int, default=286, help='scale images to this size')
         parser.add_argument('--crop_size', type=int, default=256, help='then crop to this size')
         parser.add_argument('--max_dataset_size', type=int, default=float("inf"), help='Maximum number of samples allowed per dataset. If the dataset directory contains more than max_dataset_size, only a subset is loaded.')
@@ -107,8 +104,6 @@ class BaseOptions():
 
         # modify dataset-related parser options
         dataset_name = opt.dataset_mode
-        if opt.dimensions == 3:
-            setDimensions(3)
         dataset_option_setter = data.get_option_setter(dataset_name)
         parser = dataset_option_setter(parser, self.isTrain)
 
