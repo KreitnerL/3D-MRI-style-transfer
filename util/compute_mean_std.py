@@ -37,7 +37,7 @@ for img_path in tqdm(dataset):
     a = np.array(nib.load(img_path).get_fdata())
     a = a[48:240,80:240,36:260]
     a_min = np.amin(a)
-    a_max = np.amax(a)
+    a_max = np.amax(a) - a_min
     a = (a - a_min) / a_max * 255.
     a = a.astype(np.uint8)
     unique, counts = np.unique(a, return_counts=True)

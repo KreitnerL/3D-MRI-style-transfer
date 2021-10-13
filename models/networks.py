@@ -1514,7 +1514,7 @@ class ObeliskLayer(nn.Module):
         C_in, C_mid, C_out = C
         self.down_scale_factor = down_scale_factor
         self.init_type = init_type
-        self.grid_initialized = False
+        self.grid_initialized_with = 0
         self.sample_grid = None
         self.upscale = upscale
         self.denseNetLayers = denseNetLayers
@@ -1533,19 +1533,20 @@ class ObeliskLayer(nn.Module):
             C+=32
         self.conv3 = nn.Sequential(norm(C), conv(C,C_out,1,bias=False), nn.ReLU(True))
 
-    def create_grid(self, quarter_res):
+    def create_grid(self, quarter_res, num_pixels):
         
         # Obelisk sample_grid: 1 x 1 x #samples x 1 x 3
         self.sample_grid = F.affine_grid(torch.eye(3,4).unsqueeze(0), torch.Size((1,1,*quarter_res))).view(1,1,-1,*[1]*(dimensions-2),3).detach()
         self.sample_grid.requires_grad = False
-        self.grid_initialized = True
+        self.grid_initialized_with = num_pixels
 
     def forward(self, x: torch.Tensor):
         half_res = list(map(lambda x: int(x/(self.down_scale_factor*2)), x.shape[2:]))
         quarter_res = list(map(lambda x: int(x/(self.down_scale_factor*4)), x.shape[2:]))
+        num_pixels = np.prod(quarter_res)
 
-        if not self.grid_initialized:
-            self.create_grid(quarter_res)
+        if self.grid_initialized_with != num_pixels:
+            self.create_grid(quarter_res, num_pixels)
         B = x.size()[0]
         device = x.device
 

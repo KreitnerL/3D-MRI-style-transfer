@@ -52,7 +52,7 @@ class PadIfNecessary():
         padding = []
         for dim in reversed(x.shape[1:]):
             padding.extend([0, self.mod - dim%self.mod])
-        x = F. pad(x, padding)
+        x = F.pad(x, padding)
         return x
 
 class MRIDataset(BaseDataset):
@@ -104,9 +104,9 @@ class MRIDataset(BaseDataset):
         B_path = self.B_paths[index_B]
         A_img = np.array(nib.load(A_path).get_fdata())
         B_img = np.array(nib.load(B_path).get_fdata())
-        AB = self.transform(np.stack([A_img,B_img]))
-        A = AB[0:1]
-        B = AB[1:2]
+        # AB = self.transform(np.stack([A_img,B_img]))
+        A = self.transform(A_img[np.newaxis, ...])
+        B = self.transform(B_img[np.newaxis, ...])
         return {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path}
 
     def __len__(self):
