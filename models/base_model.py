@@ -134,6 +134,14 @@ class BaseModel(ABC):
         """
         with torch.no_grad():
             self.forward()
+            if self.opt.bayesian:
+                preds = [self.fake_B]
+                for i in range(10 - 1):
+                    self.forward()
+                    preds.append(self.fake_B)
+                preds = torch.stack(preds)
+                self.fake_B = preds.mean(axis=0)
+                self.std_map = preds.std(axis=0).detach().cpu()
             self.compute_visuals()
 
     def compute_visuals(self):
@@ -166,6 +174,13 @@ class BaseModel(ABC):
                     if slice:
                         tmp = tmp[:,:,:,:,int(tmp.shape[-1]/2)]
                 visual_ret[name] = tmp
+        if self.opt.bayesian:
+            std_map = self.std_map
+            if std_map .dim() == 5:
+                std_map = std_map[:,:,:,:,int(std_map.shape[-1]/2)]
+            zeros = (torch.zeros([std_map.shape[0], 2, *std_map.shape[2:]]) - self.opt.mean) / self.opt.std
+            std_map = torch.cat([std_map, zeros], dim=1)
+            visual_ret['confidence'] = std_map
         return visual_ret
 
     def get_current_losses(self):
