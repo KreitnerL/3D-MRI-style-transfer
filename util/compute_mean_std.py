@@ -20,7 +20,7 @@ def make_dataset(dir, max_dataset_size=float("inf")):
     for root, _, fnames in sorted(os.walk(dir, followlinks=True)):
         for fname in fnames:
             fname: str
-            if fname.endswith('t1.nii.gz'):
+            if fname.endswith('.nii.gz'):
                 path = os.path.join(root, fname)
                 images.append(path)
     return images[:min(max_dataset_size, len(images))]
@@ -56,4 +56,6 @@ std = np.sqrt(std/n_pixel)
 print('mean: ', mean, 'std: ', std)
 plt.bar(list(distribution.keys()), list(distribution.values()))
 plt.title(img_folder.split('/')[-1])
-plt.savefig('distribution_{}.png'.format(img_folder.split('/')[-1]))
+plt.xlabel('Grey scale intensity')
+plt.ylabel('Number of voxels')
+plt.savefig('distribution_%s.png'%img_folder.split('/')[-1], bbox_inches='tight')

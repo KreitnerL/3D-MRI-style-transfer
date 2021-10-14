@@ -52,7 +52,7 @@ class PadIfNecessary():
     def __call__(self, x):
         padding = []
         for dim in reversed(x.shape[1:]):
-            padding.extend([0, self.mod - dim%self.mod])
+            padding.extend([0, (self.mod - dim%self.mod)%self.mod])
         x = F.pad(x, padding)
         return x
 
