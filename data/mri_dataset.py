@@ -67,7 +67,7 @@ class MRIDataset(BaseDataset):
 
         self.transformations = [
             transforms.Lambda(lambda x: x[:,48:240,80:240,36:260]), # 192x160x224
-            transforms.Lambda(lambda x: resize(x, (2,96,80,112), order=1, anti_aliasing=True)),
+            transforms.Lambda(lambda x: resize(x, (x.shape[0],96,80,112), order=1, anti_aliasing=True)),
             transforms.Lambda(lambda x: self.toGrayScale(x)),
             transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float32)),
             PadIfNecessary(3),
