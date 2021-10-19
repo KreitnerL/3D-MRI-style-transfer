@@ -8,6 +8,9 @@ from torch.nn import functional as F
 from blitz.modules import BayesianModule
 from blitz.modules.weight_sampler import TrainableRandomDistribution, PriorWeightDistribution
 
+# This implementation is based on:
+# 1) Piero Esposito (2020): BLiTZ - Bayesian Layers in Torch Zoo (a Bayesian Deep Learing library for Torch): GitHub. https://github.com/piEsposito/blitz-bayesian-deep-learning.
+# 2) Pytorch
 
 def _ntuple(n):
     def parse(x):
