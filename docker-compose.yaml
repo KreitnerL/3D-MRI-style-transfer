@@ -1,0 +1,9 @@
+version: "1.0"
+services:
+  style-transfer:
+    build: .
+    ports:
+      - "9098:9098"
+    volumes:
+      - .:/3D-MRI-style-transfer
+      - PATH_TO_YOUR_DATASET:/var/dataset
