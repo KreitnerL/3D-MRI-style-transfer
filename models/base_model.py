@@ -3,6 +3,7 @@ import torch
 from collections import OrderedDict
 from abc import ABC, abstractmethod
 from . import networks
+from util.util import colorFader
 
 
 class BaseModel(ABC):
@@ -134,6 +135,14 @@ class BaseModel(ABC):
         """
         with torch.no_grad():
             self.forward()
+            if self.opt.bayesian:
+                preds = [self.fake_B]
+                for i in range(10 - 1):
+                    self.forward()
+                    preds.append(self.fake_B)
+                preds = torch.stack(preds)
+                self.fake_B = preds.mean(axis=0)
+                self.std_map = preds.std(axis=0).detach().cpu()
             self.compute_visuals()
 
     def compute_visuals(self):
@@ -166,6 +175,19 @@ class BaseModel(ABC):
                     if slice:
                         tmp = tmp[:,:,:,:,int(tmp.shape[-1]/2)]
                 visual_ret[name] = tmp
+        if self.opt.bayesian:
+            std_map: torch.Tensor = self.std_map
+            if std_map.dim() == 5:
+                std_map = std_map[:,:,:,:,int(std_map.shape[-1]/2)]
+            shape = std_map.shape
+            std_map = std_map.view(shape[0], -1)
+            std_map -= std_map.min(1, keepdim=True)[0]
+            std_map /= std_map.max(1, keepdim=True)[0]
+            std_map = torch.stack([torch.stack([colorFader(aij) for aij in std_map[i]]) for i in range(shape[0])])
+            std_map = ((std_map * 255.) - self.opt.mean) / self.opt.std
+            std_map = std_map.permute(0,2,1)
+            std_map = std_map.view(shape[0], 3, *shape[2:])
+            visual_ret['confidence'] = std_map
         return visual_ret
 
     def get_current_losses(self):

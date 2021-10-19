@@ -63,7 +63,7 @@ class MRIDataset(BaseDataset):
         self.B_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, opt.phase + 'T2'), 't2.nii.gz'))
         self.A_size = len(self.A_paths)  # get the size of dataset A
         self.B_size = len(self.B_paths)  # get the size of dataset B
-        setDimensions(3)
+        setDimensions(3, opt.bayesian)
 
         self.transformations = [
             transforms.Lambda(lambda x: x[:,48:240,80:240,36:260]), # 192x160x224
@@ -106,7 +106,6 @@ class MRIDataset(BaseDataset):
         B_path = self.B_paths[index_B]
         A_img = np.array(nib.load(A_path).get_fdata())
         B_img = np.array(nib.load(B_path).get_fdata())
-        # AB = self.transform(np.stack([A_img,B_img]))
         A = self.transform(A_img[np.newaxis, ...])
         B = self.transform(B_img[np.newaxis, ...])
         return {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path}

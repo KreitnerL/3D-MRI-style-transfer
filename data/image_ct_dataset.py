@@ -11,7 +11,7 @@ from models.networks import setDimensions
 class ImageCTDataset(BaseDataset):
     def __init__(self, opt):
         super().__init__(opt)
-        setDimensions(2)
+        setDimensions(2, opt.bayesian)
         
         self.A_paths = natural_sort(get_custom_file_paths(os.path.join(self.opt.dataroot, 'ct', self.opt.phase), '.png'))
         self.B_paths = natural_sort(get_custom_file_paths(os.path.join(self.opt.dataroot, 'mri', self.opt.phase), '.png'))
@@ -20,8 +20,8 @@ class ImageCTDataset(BaseDataset):
 
         self.transformations = [
             transforms.ToTensor(),
+            PadIfNecessary(opt.n_downsampling),
             transforms.Lambda(lambda x: self.center(x, opt.mean, opt.std)),
-            PadIfNecessary(opt.n_downsampling)
         ]
 
         if(opt.phase == 'train'):

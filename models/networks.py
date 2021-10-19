@@ -7,7 +7,8 @@ from torch.nn.modules.batchnorm import BatchNorm2d, BatchNorm3d
 from torch.nn.modules.padding import ConstantPad3d
 from torch.optim import lr_scheduler
 import numpy as np
-from .stylegan_networks import StyleGAN2Discriminator, StyleGAN2Generator, TileStyleGAN2Discriminator
+from .stylegan_networks import StyleGAN2Discriminator, StyleGAN2Generator
+from models.bayesian import BayesianConv2d, BayesianConv3d, BayesianConvTranspose2d, BayesianConvTranspose3d
 
 
 dimensions = 2
@@ -24,6 +25,14 @@ convTransposeOptions = {
     2: nn.ConvTranspose2d,
     3: nn.ConvTranspose3d
 }
+bayesianConvOptions = {
+    2: BayesianConv2d,
+    3: BayesianConv3d
+}
+bayesianConvTransposeOptions = {
+    2: BayesianConvTranspose2d,
+    3: BayesianConvTranspose3d
+}
 
 avgPoolOptions =  {
     2: nn.AvgPool2d,
@@ -35,11 +44,15 @@ batchNormOptions = {
     3: BatchNorm3d
 }
 
-def setDimensions(dim: int):
+def setDimensions(dim: int, bayesian: bool = False):
     global dimensions, conv, convTranspose, batchNorm, avgPool
     dimensions = dim
-    conv = convOptions[dimensions]
-    convTranspose = convTransposeOptions[dimensions]
+    if bayesian:
+        conv = bayesianConvOptions[dimensions]
+        convTranspose = bayesianConvTransposeOptions[dimensions]
+    else:
+        conv = convOptions[dimensions]
+        convTranspose = convTransposeOptions[dimensions]
     batchNorm = batchNormOptions[dimensions]
     avgPool = avgPoolOptions[dimensions]
 
