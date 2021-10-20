@@ -5,5 +5,5 @@ services:
     ports:
       - "9098:9098"
     volumes:
-      - .:/3D-MRI-style-transfer
       - PATH_TO_YOUR_DATASET:/var/dataset
+    tty: true
