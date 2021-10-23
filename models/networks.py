@@ -257,7 +257,7 @@ def get_scheduler(optimizer, opt):
     return scheduler
 
 
-def init_weights(net, init_type='normal', init_gain=0.02, debug=False):
+def init_weights(net, init_type='normal', init_gain=0.02, debug=False, nonlinearity='leaky_relu'):
     """Initialize network weights.
 
     Parameters:
@@ -278,7 +278,7 @@ def init_weights(net, init_type='normal', init_gain=0.02, debug=False):
             elif init_type == 'xavier':
                 init.xavier_normal_(m.weight.data, gain=init_gain)
             elif init_type == 'kaiming':
-                init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
+                init.kaiming_normal_(m.weight.data, a=0, mode='fan_in', nonlinearity=nonlinearity)
             elif init_type == 'orthogonal':
                 init.orthogonal_(m.weight.data, gain=init_gain)
             else:
@@ -292,7 +292,7 @@ def init_weights(net, init_type='normal', init_gain=0.02, debug=False):
     net.apply(init_func)  # apply the initialization function <init_func>
 
 
-def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[], debug=False, initialize_weights=True):
+def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[], debug=False, initialize_weights=True, nonlinearity='leaky_relu'):
     """Initialize a network: 1. register CPU/GPU device (with multi-GPU support); 2. initialize the network weights
     Parameters:
         net (network)      -- the network to be initialized
@@ -308,7 +308,7 @@ def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[], debug=False, i
         # if not amp:
         # net = torch.nn.DataParallel(net, gpu_ids)  # multi-GPUs for non-AMP training
     if initialize_weights:
-        init_weights(net, init_type, init_gain=init_gain, debug=debug)
+        init_weights(net, init_type, init_gain=init_gain, debug=debug, nonlinearity=nonlinearity)
     return net
 
 
@@ -363,7 +363,7 @@ def define_G(input_nc, output_nc, ngf, netG, norm='instance', use_dropout=False,
         net = G_Resnet(input_nc, output_nc, opt.nz, num_downs=2, n_res=n_blocks - 4, ngf=ngf, norm='inst', nl_layer='relu')
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
-    return init_net(net, init_type, init_gain, gpu_ids, initialize_weights=('stylegan2' not in netG))
+    return init_net(net, init_type, init_gain, gpu_ids, initialize_weights=('stylegan2' not in netG), nonlinearity='relu')
 
 
 def define_F(input_nc, netF, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, no_antialias=False, gpu_ids=[], opt=None):
