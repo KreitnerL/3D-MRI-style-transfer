@@ -2,9 +2,9 @@
 
 # Efficient 3D Image Translation Method for the Spine
 
-This repository provides a pytorch implementation for (un)paired image translation. The codebase is part of a project that focuses on (un)paired image style translation between CT and MRI images of the spine. The generated images are used for subsequent segmentation tasks.
+This repository is part of a project that focuses on (un)paired image style translation between CT and MRI images of the spine. The generated images are used for subsequent segmentation tasks.
 
-The project investigates the effectiveness of different state-of-the-art deep learning methods such as
+The project further investigates the effectiveness of different state-of-the-art deep learning methods such as
  - Pix2Pix / CycleGAN / CUT
 - 2D / 3D input data
  - Deterministic / Bayesian
@@ -24,31 +24,30 @@ cd ./3D-MRI-style-transfer
 To use this code you have two options: Docker or Manual
 
 ### Docker
-You can simply build a docker image using the local Dockerfile. But first you have to configure the `docker-compose.yaml` file. Swap the placeholder with the path to you dataset. You may also want to change the visdom port, which is used during training. Then, you can run:
+You can simply run an inference using our pretrained model using docker. For this, please install docker and docker-compose. Additionally, make sure to have at least 6GB of diskspace available. Note that with this method, the program will not utilize the GPU but the CPU. 
+
+Before you can start, you first have to configure the `docker-compose.yaml` file. Swap the `DATASET_DIR` placeholder with the absolute path to your dataset and the `RESULTS_DIR` placeholder with the absolute path to the directory the results should be saved in. Then, you can run:
 ```sh
-# Build docker image
+# Build and run docker image
 docker-compose up
-# List all running docker containers
-docker ps -f "name=style-transfer"
 ```
 
-You can then connect to the docker image and perform training or testing:
-```sh
-# Training
-docker exec -it [CONTAINER_ID] /bin/bash -c "python train.py"
-# Testing
-docker exec -it [CONTAINER_ID] /bin/bash -c "python test.py"
-```
+After the container finished its execution you will find the results in the configured `RESULTS_DIR`.
 
 ### Manual
-We will show the manual installation for a ubuntu:20.04 system and a Nvidia GPU using CUDA version 10.2.
+We will show the manual installation for an ubuntu:20.04 system and a Nvidia GPU using CUDA version 10.2.
 
-First, install Miniconda from the [offical website](https://docs.conda.io/projects/conda/en/latest/user-guide/install/linux.html)
+First, install Miniconda (or Anaconda) from the [offical website](https://docs.conda.io/projects/conda/en/latest/user-guide/install/linux.html)
 
 Create a virtual environment with python 3.8.10:
 ```sh
-conda env create --name cut python=3.8.10
-conda activate cut
+# Create virtual environment with name 'env' and python version 3.8.10
+conda env create --name env python=3.8.10
+# Auto-enable this environment on bash startup
+conda init bash
+echo "source /opt/conda/bin/activate && conda activate env" >> ~/.bashrc
+# Activate environment
+conda activate env
 ```
 
 Install PyTorch and torchvision. Make sure to install a [version compatible with your GPU's CUDA version](https://pytorch.org/get-started/previous-versions/). E.g. for a conda environment and CUDA 10.2 run:
