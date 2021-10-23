@@ -144,6 +144,12 @@ class BayesianConv2d(BayesianModule):
         self.bias_rho = nn.Parameter(torch.Tensor(out_channels).normal_(posterior_rho_init, 0.1))
         self.bias_sampler = TrainableRandomDistribution(self.bias_mu, self.bias_rho)
 
+        if not self.freeze:
+            del self.weight_mu
+            del self.weight_rho
+            del self.bias_mu
+            del self.bias_rho
+
         # Priors (as BBP paper)
         self.weight_prior_dist = PriorWeightDistribution(self.prior_pi, self.prior_sigma_1, self.prior_sigma_2, dist = self.prior_dist)
         self.bias_prior_dist = PriorWeightDistribution(self.prior_pi, self.prior_sigma_1, self.prior_sigma_2, dist = self.prior_dist)
@@ -276,6 +282,12 @@ class BayesianConv3d(BayesianModule):
         self.bias_mu = nn.Parameter(torch.Tensor(out_channels).normal_(posterior_mu_init, 0.1))
         self.bias_rho = nn.Parameter(torch.Tensor(out_channels).normal_(posterior_rho_init, 0.1))
         self.bias_sampler = TrainableRandomDistribution(self.bias_mu, self.bias_rho)
+
+        if not self.freeze:
+            del self.weight_mu
+            del self.weight_rho
+            del self.bias_mu
+            del self.bias_rho
 
         # Priors (as BBP paper)
         self.weight_prior_dist = PriorWeightDistribution(self.prior_pi, self.prior_sigma_1, self.prior_sigma_2, dist = self.prior_dist)
@@ -411,6 +423,12 @@ class BayesianConvTranspose2d(BayesianModule):
         self.bias_mu = nn.Parameter(torch.Tensor(out_channels).normal_(posterior_mu_init, 0.1))
         self.bias_rho = nn.Parameter(torch.Tensor(out_channels).normal_(posterior_rho_init, 0.1))
         self.bias_sampler = TrainableRandomDistribution(self.bias_mu, self.bias_rho)
+        
+        if not self.freeze:
+            del self.weight_mu
+            del self.weight_rho
+            del self.bias_mu
+            del self.bias_rho
 
         # Priors (as BBP paper)
         self.weight_prior_dist = PriorWeightDistribution(self.prior_pi, self.prior_sigma_1, self.prior_sigma_2, dist = self.prior_dist)
@@ -555,6 +573,12 @@ class BayesianConvTranspose3d(BayesianModule):
             self.bias_prior_dist = PriorWeightDistribution(self.prior_pi, self.prior_sigma_1, self.prior_sigma_2, dist = self.prior_dist)
         else:
             self.register_buffer('bias_zero', torch.zeros((self.out_channels)) )
+
+        if not self.freeze:
+            del self.weight_mu
+            del self.weight_rho
+            del self.bias_mu
+            del self.bias_rho
 
         # Priors (as BBP paper)
         self.weight_prior_dist = PriorWeightDistribution(self.prior_pi, self.prior_sigma_1, self.prior_sigma_2, dist = self.prior_dist)
