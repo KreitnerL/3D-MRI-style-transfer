@@ -1653,20 +1653,20 @@ class ObeliskHybridGenerator(nn.Module):
         obelisk1 = ObeliskLayer((1,128,32), down_scale_factor=2, K=512)
         obelisk2 = ObeliskLayer((4,128,32), down_scale_factor=1, K=128)
         self.model0 = nn.Sequential(avgPool(3, padding=1, stride=1), obelisk1)
-        self.model1 = nn.Sequential(conv(1, 4, 3, padding=1), norm(4), nn.LeakyReLU(leakage))
+        self.model1 = nn.Sequential(conv(1, 4, 3, padding=1), norm(4), nn.ReLU(leakage))
         self.model10 = obelisk2
         self.model11 = nn.Sequential(
             conv(4, 16, 3, stride=2, padding=1),
             norm(16),
-            nn.LeakyReLU(leakage),
+            nn.ReLU(leakage),
             conv(16, 16, 3, padding=1),
             norm(16),
-            nn.LeakyReLU(leakage)
+            nn.ReLU(leakage)
         )
         self.model110 = nn.Sequential(
             conv(16, 32, 3, stride=2, padding=1),
             norm(32),
-            nn.LeakyReLU(leakage),
+            nn.ReLU(leakage),
         )
 
     def forward(self, x: torch.Tensor, layers=[], encode_only=False):

@@ -117,7 +117,7 @@ def save_nifti_image(image_tensor: torch.Tensor, image_path):
     Save a MRI numpy image to the disk. Resize the image by a scaling factor and enforce an aspect ratio of 1
     """
     new_img = nib.Nifti1Image(image_tensor.detach().cpu().numpy()[0,0,:,:,:], np.eye(4))
-    nib.save(new_img, '%s.nii.gz'%image_path)
+    nib.save(new_img, image_path)
 
 
 def print_numpy(x, val=True, shp=False):

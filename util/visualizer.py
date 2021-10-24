@@ -46,11 +46,10 @@ def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256, mean=
 def save_3D_images(webpage, visuals, image_path: str):
     image_dir = webpage.get_image_dir()
     short_path = ntpath.basename(image_path[0])
-    name = os.path.splitext(short_path)[0]
     for label, im_data in visuals.items():
         if 'fake' not in label:
             continue
-        image_name = '%s/%s' % (label, name)
+        image_name = '%s/%s' % (label, short_path)
         os.makedirs(os.path.join(image_dir, label), exist_ok=True)
         save_path = os.path.join(image_dir, image_name)
         util.save_nifti_image(im_data, save_path)
