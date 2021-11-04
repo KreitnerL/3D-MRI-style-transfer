@@ -1718,43 +1718,62 @@ class ObeliskHybridGenerator(nn.Module):
     Taken from https://github.com/mattiaspaul/OBELISK
     Hybrid OBELISK CNN model that contains two obelisk layers combined with traditional CNNs the layers have 512 and 128 trainable offsets and 230k trainable weights in total
     """
-    def __init__(self, C_out: int, mean: float, std: float):
+    def __init__(self, C_out: int, mean: float, std: float, cbam=False):
         super().__init__()
         self.mean = mean
         self.std = std
 
         norm = get_norm_layer('instance')
+        activation = lambda: nn.Hardswish(True)
+        self.activation = activation()
+        self.cbam = cbam
+        
+        def get_cbam(*x):
+            if self.cbam:
+                return [CBAMBlock(x)]
+            else:
+                return []
 
         #U-Net Encoder
         leakage = 0.05
         self.conv2 = conv(16, 32, 3, stride=2, padding=1)
         self.batch2 = norm(32)
 
-        #U-Net Decoder 
-        self.conv6bU = conv(64, 32, 3, padding=1)
-        self.batch6bU = norm(32)
-        self.conv6U = conv(64+16, 32, 3, padding=1)
-        self.batch6U = norm(32)
         # self.conv8 = conv(32, C_out, 1)
         self.conv8 = convTranspose(32, 1, kernel_size=3, stride=2, padding=1, output_padding=1)
 
         obelisk1 = ObeliskLayer((1,128,32), down_scale_factor=2, K=512)
         obelisk2 = ObeliskLayer((4,128,32), down_scale_factor=1, K=128)
-        self.model0 = nn.Sequential(avgPool(3, padding=1, stride=1), obelisk1)
-        self.model1 = nn.Sequential(conv(1, 4, 3, padding=1), norm(4), nn.ReLU(leakage))
-        self.model10 = obelisk2
+        self.model0 = nn.Sequential(avgPool(3, padding=1, stride=1), obelisk1,*get_cbam(32, 2))
+        self.model1 = nn.Sequential(conv(1, 4, 3, padding=1), norm(4), activation())
+        self.model10 = nn.Sequential(obelisk2, *get_cbam(32, 2))
         self.model11 = nn.Sequential(
             conv(4, 16, 3, stride=2, padding=1),
             norm(16),
-            nn.ReLU(leakage),
+            activation(),
+            *get_cbam(16, 2),
             conv(16, 16, 3, padding=1),
             norm(16),
-            nn.ReLU(leakage)
+            activation(),
+            *get_cbam(16, 2)
         )
         self.model110 = nn.Sequential(
             conv(16, 32, 3, stride=2, padding=1),
             norm(32),
-            nn.ReLU(leakage),
+            activation(),
+            *get_cbam(32, 2)
+        )
+        self.output1 = nn.Sequential(
+            conv(64, 32, 3, padding=1),
+            norm(32),
+            activation(),
+            *get_cbam(32, 2)
+        )
+        self.output2 = nn.Sequential(
+            conv(64+16, 32, 3, padding=1),
+            norm(32),
+            activation(),
+            *get_cbam(32, 2)
         )
 
     def forward(self, x: torch.Tensor, layers=[], encode_only=False):
@@ -1777,14 +1796,13 @@ class ObeliskHybridGenerator(nn.Module):
             return feats
 
         #unet-decoder
-        x = F.leaky_relu(self.batch6bU(self.conv6bU(torch.cat((x0,x110),1))),leakage)
+        x = self.output1(torch.cat((x0,x110),1))
         x = F.interpolate(x, size=half_res, mode='trilinear', align_corners=False)
-        x = F.leaky_relu(self.batch6U(self.conv6U(torch.cat((x,x10,x11),1))),leakage)
+        x = self.output2(torch.cat((x,x10,x11),1))
         x = self.conv8(x)
         # x = F.interpolate(x, size=size[2:], mode='trilinear', align_corners=False)
-        x = torch.tanh(x)
-
-        x = ((x+1)/2)*255.
+        x = torch.sigmoid(x)
+        x = x*255.
         x = (x-self.mean) / self.std
         return x
 
