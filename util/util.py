@@ -69,6 +69,7 @@ def tensor2im(input_image, mean, std, imtype=np.uint8):
         if image_numpy.shape[0] == 1:  # grayscale to RGB
             image_numpy = np.tile(image_numpy, (3, 1, 1))
         image_numpy = (np.transpose(image_numpy, (1, 2, 0))  * std) + mean  # post-processing: tranpose and scaling
+        input_image = torch.clamp(input_image, 0, 255)
     else:  # if it is a numpy array, do nothing
         image_numpy = input_image
     return image_numpy.astype(imtype)
