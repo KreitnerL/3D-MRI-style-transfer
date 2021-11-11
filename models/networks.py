@@ -1622,7 +1622,7 @@ class ObeliskLayer(nn.Module):
         norm=get_norm_layer('instance')
         
         # Obelisk N=1 variant offsets: 1x #offsets x1xNx3
-        self.offset = nn.Parameter(torch.randn(1,K,*[1]*(dimensions-1),3)*0.05)
+        self.offset = nn.Parameter(torch.randn(1,K,*[1]*(dimensions-1),dimensions)*0.05)
 
         # Dense-Net with 1x1x1 kernels
         self.conv1 = nn.Sequential(conv(C_in*K,C_mid,1,groups=4,bias=False), nn.ReLU(True))
@@ -1635,9 +1635,9 @@ class ObeliskLayer(nn.Module):
         self.conv3 = nn.Sequential(norm(C), conv(C,C_out,1,bias=False), nn.ReLU(True))
 
     def create_grid(self, quarter_res, num_pixels):
-        
+        grid_base = [2,3] if dimensions==2 else [3,4]
         # Obelisk sample_grid: 1 x 1 x #samples x 1 x 3
-        self.sample_grid = F.affine_grid(torch.eye(3,4).unsqueeze(0), torch.Size((1,1,*quarter_res))).view(1,1,-1,*[1]*(dimensions-2),3).detach()
+        self.sample_grid = F.affine_grid(torch.eye(*grid_base).unsqueeze(0), torch.Size((1,1,*quarter_res))).view(1,1,-1,*[1]*(dimensions-2),dimensions).detach()
         self.sample_grid.requires_grad = False
         self.grid_initialized_with = num_pixels
 
@@ -1660,7 +1660,7 @@ class ObeliskLayer(nn.Module):
             x = torch.cat([x, self.denseNet[i](x)], dim=1)
         x = self.conv3(x)
         if self.upscale:
-            x = F.interpolate(x, size=half_res, mode='trilinear', align_corners=False)
+            x = F.interpolate(x, size=half_res, mode='trilinear' if dimensions==3 else 'bilinear', align_corners=False)
         return x
 
 class ObeliskResNet(nn.Module):
@@ -1797,7 +1797,7 @@ class ObeliskHybridGenerator(nn.Module):
 
         #unet-decoder
         x = self.output1(torch.cat((x0,x110),1))
-        x = F.interpolate(x, size=half_res, mode='trilinear', align_corners=False)
+        x = F.interpolate(x, size=half_res, mode='trilinear' if dimensions==3 else 'bilinear', align_corners=False)
         x = self.output2(torch.cat((x,x10,x11),1))
         x = self.conv8(x)
         # x = F.interpolate(x, size=size[2:], mode='trilinear', align_corners=False)
