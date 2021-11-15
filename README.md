@@ -26,7 +26,12 @@ To use this code you have two options: Docker or Manual
 ### Docker
 You can simply run an inference using our pretrained model using docker. For this, please install docker and docker-compose. Additionally, make sure to have at least 6GB of diskspace available. Note that with this method, the program will not utilize the GPU but the CPU. 
 
-Before you can start, you first have to configure the `docker-compose.yaml` file. Swap the `DATASET_DIR` placeholder with the absolute path to your dataset and the `RESULTS_DIR` placeholder with the absolute path to the directory the results should be saved in. Then, you can run:
+Before you can start, you first have to configure the `docker-compose.yaml` file. Replace the following three placeholders:
+- `DATASET_DIR`: The absolute path to your dataset
+- `RESULTS_DIR`: The absolute path to the directory the results should be saved in
+- `CHECKPOINT_PATH`: The absolute path to the checkpoint file that should be used by the generator.
+
+Then, you can run:
 ```sh
 # Build and run docker image
 docker-compose up

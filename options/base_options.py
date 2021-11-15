@@ -149,9 +149,9 @@ class BaseOptions():
         opt = self.gather_options()
         opt.isTrain = self.isTrain   # train or test
 
-        if opt.glr == self.parser.get_default('glr'):
+        if opt.phase=="train" and opt.glr == self.parser.get_default('glr'):
             opt.glr = opt.lr
-        if opt.dlr == self.parser.get_default('dlr'):
+        if opt.phase=="train" and opt.dlr == self.parser.get_default('dlr'):
             opt.dlr = opt.lr
 
         # process opt.suffix
