@@ -1634,10 +1634,10 @@ class ObeliskLayer(nn.Module):
             C+=32
         self.conv3 = nn.Sequential(norm(C), conv(C,C_out,1,bias=False), nn.ReLU(True))
 
-    def create_grid(self, quarter_res):
+    def create_grid(self, quarter_res, device):
         grid_base = [2,3] if dimensions==2 else [3,4]
         # Obelisk sample_grid: 1 x 1 x #samples x 1 x 3
-        self.sample_grid = F.affine_grid(torch.eye(*grid_base).unsqueeze(0), torch.Size((1,1,*quarter_res))).view(1,1,-1,*[1]*(dimensions-2),dimensions).detach()
+        self.sample_grid = F.affine_grid(torch.eye(*grid_base, device=device).unsqueeze(0), torch.Size((1,1,*quarter_res))).view(1,1,-1,*[1]*(dimensions-2),dimensions).detach()
         self.sample_grid.requires_grad = False
         self.grid_initialized_with = quarter_res
 
@@ -1646,12 +1646,11 @@ class ObeliskLayer(nn.Module):
         quarter_res = list(map(lambda x: int(x/(self.down_scale_factor*4)), x.shape[2:]))
 
         if self.grid_initialized_with != quarter_res:
-            self.create_grid(quarter_res)
+            self.create_grid(quarter_res, x.device)
         B = x.size()[0]
-        device = x.device
 
         # Obelisk Layer
-        x = F.grid_sample(x, (self.sample_grid.to(device).repeat(B,1,*[1]*dimensions) + self.offset), align_corners=True).view(B,-1,*quarter_res)
+        x = F.grid_sample(x, (self.sample_grid.repeat(B,1,*[1]*dimensions) + self.offset), align_corners=True).view(B,-1,*quarter_res)
         x = self.conv1(x)
 
         # Dense-Net with 1x1x1 kernels

@@ -20,6 +20,7 @@ class ImageCTDataset(BaseDataset):
 
         self.transformations = [
             transforms.ToTensor(),
+            transforms.Lambda(lambda x: x.type(opt.precision)),
             PadIfNecessary(opt.n_downsampling),
             transforms.Lambda(lambda x: self.center(x, opt.mean, opt.std)),
         ]
