@@ -1634,20 +1634,19 @@ class ObeliskLayer(nn.Module):
             C+=32
         self.conv3 = nn.Sequential(norm(C), conv(C,C_out,1,bias=False), nn.ReLU(True))
 
-    def create_grid(self, quarter_res, num_pixels):
+    def create_grid(self, quarter_res):
         grid_base = [2,3] if dimensions==2 else [3,4]
         # Obelisk sample_grid: 1 x 1 x #samples x 1 x 3
         self.sample_grid = F.affine_grid(torch.eye(*grid_base).unsqueeze(0), torch.Size((1,1,*quarter_res))).view(1,1,-1,*[1]*(dimensions-2),dimensions).detach()
         self.sample_grid.requires_grad = False
-        self.grid_initialized_with = num_pixels
+        self.grid_initialized_with = quarter_res
 
     def forward(self, x: torch.Tensor):
         half_res = list(map(lambda x: int(x/(self.down_scale_factor*2)), x.shape[2:]))
         quarter_res = list(map(lambda x: int(x/(self.down_scale_factor*4)), x.shape[2:]))
-        num_pixels = np.prod(quarter_res)
 
-        if self.grid_initialized_with != num_pixels:
-            self.create_grid(quarter_res, num_pixels)
+        if self.grid_initialized_with != quarter_res:
+            self.create_grid(quarter_res)
         B = x.size()[0]
         device = x.device
 
@@ -1724,7 +1723,7 @@ class ObeliskHybridGenerator(nn.Module):
         self.std = std
 
         norm = get_norm_layer('instance')
-        activation = lambda: nn.Hardswish(True)
+        activation = lambda: nn.ReLU(True)
         self.activation = activation()
         self.cbam = cbam
         
@@ -1800,7 +1799,6 @@ class ObeliskHybridGenerator(nn.Module):
         x = F.interpolate(x, size=half_res, mode='trilinear' if dimensions==3 else 'bilinear', align_corners=False)
         x = self.output2(torch.cat((x,x10,x11),1))
         x = self.conv8(x)
-        # x = F.interpolate(x, size=size[2:], mode='trilinear', align_corners=False)
         x = torch.sigmoid(x)
         x = x*255.
         x = (x-self.mean) / self.std
