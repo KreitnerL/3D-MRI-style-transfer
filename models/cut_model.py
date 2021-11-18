@@ -58,12 +58,15 @@ class CUTModel(BaseModel):
 
         # specify the training losses you want to print out.
         # The training/test scripts will call <BaseModel.get_current_losses>
-        self.loss_names = ['G_GAN', 'D_real', 'D_fake', 'G', 'NCE']
+        self.loss_names = ['G_GAN', 'D_real', 'D_fake', 'G']
+        if opt.lambda_NCE > 0:
+            self.loss_names.append('NCE')
         self.visual_names = ['real_A', 'fake_B', 'real_B']
         self.nce_layers = [int(i) for i in self.opt.nce_layers.split(',')]
 
         if opt.nce_idt and self.isTrain:
-            self.loss_names += ['NCE_Y']
+            if opt.lambda_NCE > 0:
+                self.loss_names.append('NCE_Y')
             self.visual_names += ['idt_B']
 
         if self.isTrain:
@@ -124,12 +127,12 @@ class CUTModel(BaseModel):
         # update G
         self.set_requires_grad(self.netD, False)
         self.optimizer_G.zero_grad()
-        if self.opt.netF == 'mlp_sample':
+        if self.opt.netF == 'mlp_sample' and self.opt.lambda_NCE>0:
             self.optimizer_F.zero_grad()
         self.loss_G = self.compute_G_loss()
         self.loss_G.backward()
         self.optimizer_G.step()
-        if self.opt.netF == 'mlp_sample':
+        if self.opt.netF == 'mlp_sample' and self.opt.lambda_NCE>0:
             self.optimizer_F.step()
 
     def set_input(self, input):
@@ -171,9 +174,8 @@ class CUTModel(BaseModel):
 
     def compute_D_loss(self):
         """Calculate GAN loss for the discriminator"""
-        fake = self.fake_B.detach()
         # Fake; stop backprop to the generator by detaching fake_B
-        pred_fake = self.netD(fake)
+        pred_fake = self.netD(self.fake_B.detach())
         self.loss_D_fake = self.criterionGAN(pred_fake, False).mean()
         # Real
         self.pred_real = self.netD(self.real_B)

@@ -221,7 +221,7 @@ def loss_log_2_png(path: str, dataset_size=234):
         if line.startswith('='):
             continue
         meta_data = re.sub('\(|\)|\:|\,', '', re.search('\(.*\)', line).group(0)).split()
-        x_i = int(meta_data[1]) + int(meta_data[3])/234.0
+        x_i = int(meta_data[1]) + int(meta_data[3])/dataset_size
         line =  re.sub('\(.*\)', '', line)
         y_i = []
         for t in line.split():
