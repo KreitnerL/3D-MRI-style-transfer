@@ -1172,7 +1172,7 @@ class ResnetGenerator(nn.Module):
                           nn.ReLU(True)]
         model += [get_pad_layer('refl')(3)]
         model += [conv(ngf, output_nc, kernel_size=7, padding=0)]
-        model += [nn.Tanh()]
+        model += [nn.Sigmoid()]
 
         self.model = nn.Sequential(*model)
 
@@ -1199,7 +1199,7 @@ class ResnetGenerator(nn.Module):
         else:
             """Standard forward"""
             fake = self.model(input)
-            fake = ((fake+1)/2)*255.
+            fake = fake*255.
             fake = (fake-self.opt.mean) / self.opt.std
             return fake
 
@@ -1777,20 +1777,21 @@ class ObeliskHybridGenerator(nn.Module):
     def forward(self, x: torch.Tensor, layers=[], encode_only=False):
         size = x.size()
         half_res = list(map(lambda x: int(x/2), size[2:]))
-        leakage = 0.05 #leaky ReLU used for conventional CNNs
 
         x0 = self.model0(x)
         x1 = self.model1(x)
         x10 = self.model10(x1)
         x11 = self.model11(x1)
         x110 = self.model110(x11)
+        feats = []
 
-        if encode_only:
+        if len(layers) > 0:
             all_feats = [x0, x1, x10, x11, x110]
             feats = []
             for i,feat in enumerate(all_feats):
                 if i in layers:
                     feats.append(feat)
+        if encode_only:
             return feats
 
         #unet-decoder
@@ -1801,6 +1802,9 @@ class ObeliskHybridGenerator(nn.Module):
         x = torch.sigmoid(x)
         x = x*255.
         x = (x-self.mean) / self.std
+
+        if len(layers) > 0:
+            return x, feats
         return x
 
 #Hybrid OBELISK CNN model that contains two obelisk layers combined with traditional CNNs
@@ -1908,7 +1912,7 @@ class obeliskhybrid_visceral(nn.Module):
         x = F.interpolate(x, size=[*half_res], mode='trilinear', align_corners=False)
         x = F.leaky_relu(self.batch6U(self.conv6U(torch.cat((x,x_o1,x2),1))),leakage)
         x = F.interpolate(self.conv8(x), size=[D,H,W], mode='trilinear', align_corners=False)
-        x = torch.tanh(x)
-        x = ((x+1)/2)*255.
+        x = torch.sigmoid(x)
+        x = x*255.
         x = (x-self.mean) / self.std
         return x
