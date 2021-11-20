@@ -1602,7 +1602,7 @@ class ObeliskLayer(nn.Module):
     Taken from https://github.com/mattiaspaul/OBELISK
     Defines the OBELISK layer that performs deformable convolution with the given number of trainable spatial offsets and a 5 layer 1x1 Dense-Net. The tensor after this layer will be interpolated the input tensor shape using trilinear interpolation
     """
-    def __init__(self, C: tuple, down_scale_factor: int=1, K: int = 128, denseNetLayers: int = 4, init_type='xavier', upscale=True):
+    def __init__(self, C: tuple, down_scale_factor: int=1, K: int = 128, denseNetLayers: int = 4, init_type='xavier', upscale=True, activation=nn.ReLU):
         """
         Creates an OBELISK layer that performs deformable convolution with the given number of trainable spatial offsets and a 5 layer 1x1 Dense-Net. The tensor after this layer will be interpolated the input tensor shape using trilinear interpolation
 
@@ -1625,14 +1625,14 @@ class ObeliskLayer(nn.Module):
         self.offset = nn.Parameter(torch.randn(1,K,*[1]*(dimensions-1),dimensions)*0.05)
 
         # Dense-Net with 1x1x1 kernels
-        self.conv1 = nn.Sequential(conv(C_in*K,C_mid,1,groups=4,bias=False), nn.ReLU(True))
+        self.conv1 = nn.Sequential(conv(C_in*K,C_mid,1,groups=4,bias=False), activation(True))
         # self.conv2 = nn.Sequential(batchNorm(128), conv(128,32,1,bias=False), nn.ReLU(True))
         self.denseNet = nn.ModuleList([])
         C = C_mid
         for i in range(denseNetLayers):
-            self.denseNet.append(nn.Sequential(norm(C), conv(C,32,1,bias=False), nn.ReLU(True)))
+            self.denseNet.append(nn.Sequential(norm(C), conv(C,32,1,bias=False), activation(True)))
             C+=32
-        self.conv3 = nn.Sequential(norm(C), conv(C,C_out,1,bias=False), nn.ReLU(True))
+        self.conv3 = nn.Sequential(norm(C), conv(C,C_out,1,bias=False), activation(True))
 
     def create_grid(self, quarter_res, device):
         grid_base = [2,3] if dimensions==2 else [3,4]
@@ -1701,7 +1701,8 @@ class ObeliskDiscriminator(nn.Module):
             conv(C_in, 64, kernel_size=3, stride=2, padding=1),
             norm(64),
             nn.LeakyReLU(0.05),
-            ObeliskLayer((64,128,128), down_scale_factor=1, K=128, upscale=False),
+            ObeliskLayer((64,128,128), down_scale_factor=1, K=128,
+                        upscale=False, activation=nn.LeakyReLU),
             norm(128),
             nn.LeakyReLU(0.05),
             conv(128, 1, kernel_size=3, stride=1, padding=1),
@@ -1862,20 +1863,19 @@ class obeliskhybrid_visceral(nn.Module):
         self.batch6U = batchNorm(32)
         self.conv8 = conv(32, num_labels, 1)
         
-    def forward(self, inputImg: torch.Tensor):
+    def forward(self, inputImg: torch.Tensor, layers=[], encode_only=False):
         half_res = list(map(lambda x: int(x/2), inputImg.shape[2:]))
         quarter_res = list(map(lambda x: int(x/4), inputImg.shape[2:]))
         eighth_res = list(map(lambda x: int(x/8), inputImg.shape[2:]))
 
-        if not self.initialized:
-            self.sample_grid1 = F.affine_grid(torch.eye(3,4).unsqueeze(0),torch.Size((1,1,*quarter_res))).view(1,1,-1,1,3).detach()
-            self.sample_grid1.requires_grad = False
-            self.sample_grid2 = F.affine_grid(torch.eye(3,4).unsqueeze(0),torch.Size((1,1,*eighth_res))).view(1,1,-1,1,3).detach()
-            self.sample_grid2.requires_grad = False
-            self.initialized = True
+        # if not self.initialized:
+        self.sample_grid1 = F.affine_grid(torch.eye(3,4, device=inputImg.device).unsqueeze(0),torch.Size((1,1,*quarter_res))).view(1,1,-1,1,3).detach()
+        self.sample_grid1.requires_grad = False
+        self.sample_grid2 = F.affine_grid(torch.eye(3,4, device=inputImg.device).unsqueeze(0),torch.Size((1,1,*eighth_res))).view(1,1,-1,1,3).detach()
+        self.sample_grid2.requires_grad = False
+            # self.initialized = True
     
         B,C,D,H,W = inputImg.size()
-        device = inputImg.device
         leakage = 0.05 #leaky ReLU used for conventional CNNs
         
         #unet-encoder
@@ -1888,7 +1888,7 @@ class obeliskhybrid_visceral(nn.Module):
         
         #in this model two obelisk layers with fewer spatial offsets are used
         #obelisk layer 1
-        x_o1 = F.grid_sample(x1, (self.sample_grid1.to(device).repeat(B,1,1,1,1) + self.offset1)).view(B,-1,*quarter_res)
+        x_o1 = F.grid_sample(x1, (self.sample_grid1.repeat(B,1,1,1,1) + self.offset1)).view(B,-1,*quarter_res)
         #1x1 kernel dense-net
         x_o1 = F.relu(self.linear1a(x_o1))
         x_o1a = torch.cat((x_o1,F.relu(self.linear1b(self.batch1a(x_o1)))),dim=1)
@@ -1898,7 +1898,7 @@ class obeliskhybrid_visceral(nn.Module):
         x_o1 = F.interpolate(x_o1d, size=[*half_res], mode='trilinear', align_corners=False)
         
         #obelisk layer 2
-        x_o2 = F.grid_sample(x00, (self.sample_grid2.to(device).repeat(B,1,1,1,1) + self.offset2)).view(B,-1,*eighth_res)
+        x_o2 = F.grid_sample(x00, (self.sample_grid2.repeat(B,1,1,1,1) + self.offset2)).view(B,-1,*eighth_res)
         x_o2 = F.relu(self.linear2a(x_o2))
         #1x1 kernel dense-net
         x_o2a = torch.cat((x_o2,F.relu(self.linear2b(self.batch2a(x_o2)))),dim=1)
@@ -1906,6 +1906,14 @@ class obeliskhybrid_visceral(nn.Module):
         x_o2c = torch.cat((x_o2b,F.relu(self.linear2d(self.batch2c(x_o2b)))),dim=1)
         x_o2d = F.relu(self.linear2e(self.batch2d(x_o2c)))
         x_o2 = F.interpolate(x_o2d, size=[*quarter_res], mode='trilinear', align_corners=False)
+
+        if encode_only:
+            all_feats = [x_o2, x1, x_o1, x2, x]
+            feats = []
+            for i,feat in enumerate(all_feats):
+                if i in layers:
+                    feats.append(feat)
+            return feats
 
         #unet-decoder
         x = F.leaky_relu(self.batch6bU(self.conv6bU(torch.cat((x,x_o2),1))),leakage)

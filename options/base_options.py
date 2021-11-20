@@ -30,7 +30,7 @@ class BaseOptions():
         parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='models are saved here')
         parser.add_argument('--mean', type=float, default=127.5, help='Mean of source dataset')
         parser.add_argument('--std', type=float, default=50, help='Standard Deviation of target dataset')
-        parser.add_argument('--precision', type=int, default=32, choice=[16, 32], help='The precision used for all calculations')
+        parser.add_argument('--precision', type=int, default=32, choices=[16, 32], help='The precision used for all calculations')
         # model parameters
         parser.add_argument('--model', type=str, default='cut', help='chooses which model to use.')
         parser.add_argument('--bayesian', action='store_true', help='Use bayesian weight layers to produce confidence map')
