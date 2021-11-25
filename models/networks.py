@@ -1743,25 +1743,22 @@ class ObeliskHybridGenerator(nn.Module):
 
         obelisk1 = ObeliskLayer((1,128,32), down_scale_factor=2, K=512)
         obelisk2 = ObeliskLayer((4,128,32), down_scale_factor=1, K=128)
-        self.model0 = nn.Sequential(avgPool(3, padding=1, stride=1), obelisk1,*get_cbam(32, 2))
-        self.model1 = nn.Sequential(conv(1, 4, 3, padding=1), norm(4), activation())
-        self.model10 = nn.Sequential(obelisk2, *get_cbam(32, 2))
+        self.model0 = nn.Sequential(avgPool(3, padding=1, stride=1), obelisk1)
+        self.norm_act0 = nn.Sequential(norm(32), activation(), *get_cbam(32, 2))
+        self.model1 = nn.Sequential(conv(1, 4, 3, padding=1))
+        self.norm_act1 = nn.Sequential(norm(4), activation())
+        self.model10 = nn.Sequential(obelisk2, activation())
+        self.norm_act10 = nn.Sequential(norm(32), activation(), *get_cbam(32, 2))
         self.model11 = nn.Sequential(
             conv(4, 16, 3, stride=2, padding=1),
             norm(16),
             activation(),
             *get_cbam(16, 2),
-            conv(16, 16, 3, padding=1),
-            norm(16),
-            activation(),
-            *get_cbam(16, 2)
+            conv(16, 16, 3, padding=1)
         )
-        self.model110 = nn.Sequential(
-            conv(16, 32, 3, stride=2, padding=1),
-            norm(32),
-            activation(),
-            *get_cbam(32, 2)
-        )
+        self.norm_act11 = nn.Sequential(norm(16), activation(),*get_cbam(16, 2))
+        self.model110 = nn.Sequential(conv(16, 32, 3, stride=2, padding=1))
+        self.norm_act110 = nn.Sequential(norm(32), activation(),*get_cbam(32, 2))
         self.output1 = nn.Sequential(
             conv(64, 32, 3, padding=1),
             norm(32),
@@ -1779,20 +1776,31 @@ class ObeliskHybridGenerator(nn.Module):
         size = x.size()
         half_res = list(map(lambda x: int(x/2), size[2:]))
         leakage = 0.05 #leaky ReLU used for conventional CNNs
+        all_feats=[]
 
         x0 = self.model0(x)
+        all_feats.append(x0)
+        x0 = self.norm_act0(x0)
         x1 = self.model1(x)
+        all_feats.append(x1)
+        x1 = self.norm_act1(x1)
         x10 = self.model10(x1)
+        all_feats.append(x10)
+        x10 = self.norm_act10(x10)
         x11 = self.model11(x1)
+        all_feats.append(x11)
+        x11 = self.norm_act11(x11)
         x110 = self.model110(x11)
+        all_feats.append(x110)
+        x110 = self.norm_act110(x110)
 
-        if encode_only:
-            all_feats = [x0, x1, x10, x11, x110]
+        if len(layers)>0:
             feats = []
             for i,feat in enumerate(all_feats):
                 if i in layers:
                     feats.append(feat)
-            return feats
+            if encode_only:
+                return feats
 
         #unet-decoder
         x = self.output1(torch.cat((x0,x110),1))
@@ -1802,6 +1810,8 @@ class ObeliskHybridGenerator(nn.Module):
         x = torch.sigmoid(x)
         x = x*255.
         x = (x-self.mean) / self.std
+        if len(layers)>0:
+            return x, feats
         return x
 
 #Hybrid OBELISK CNN model that contains two obelisk layers combined with traditional CNNs

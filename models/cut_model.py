@@ -112,7 +112,7 @@ class CUTModel(BaseModel):
             if self.opt.lambda_NCE > 0.0:
                 self.optimizer_F = torch.optim.Adam(self.netF.parameters(), lr=self.opt.lr, betas=(self.opt.beta1, self.opt.beta2))
                 self.optimizers.append(self.optimizer_F)
-
+            
     def optimize_parameters(self):
         # forward
         self.forward()
@@ -227,3 +227,12 @@ class CUTModel(BaseModel):
             total_nce_loss += loss.mean()
 
         return total_nce_loss / n_layers
+
+def log_gradients(model):
+		all_grads = {}
+		all_weights = {}
+		for n, p in model.named_parameters():
+			if p.grad is not None:
+				all_grads[n] = np.mean(p.grad.cpu().numpy())
+				all_weights[n] = p 
+		return all_grads, all_weights
