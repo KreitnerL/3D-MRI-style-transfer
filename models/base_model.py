@@ -44,7 +44,7 @@ class BaseModel(ABC):
         self.image_paths = []
         self.metric = 0  # used for learning rate policy 'plateau'
         self.networks = []
-        self.scaler = torch.cuda.amp.GradScaler(init_scale=2**32 if self.opt.precision == torch.float32 else 2**16)
+        self.scaler = torch.cuda.amp.GradScaler(enabled=self.opt.amp, init_scale=1)
 
     @staticmethod
     def dict_grad_hook_factory(add_func=lambda x: x):
@@ -135,7 +135,7 @@ class BaseModel(ABC):
         It also calls <compute_visuals> to produce additional visualization results
         """
         with torch.no_grad():
-            with torch.cuda.amp.autocast(dtype=self.opt.precision):
+            with torch.cuda.amp.autocast(enabled=self.opt.amp):
                 self.forward()
                 if self.opt.bayesian:
                     preds = [self.fake_B]

@@ -95,7 +95,7 @@ class Pix2PixModel(BaseModel):
     def backward_D(self):
         """Calculate GAN loss for the discriminator"""
         # Fake; stop backprop to the generator by detaching fake_B
-        with torch.cuda.amp.autocast(dtype=self.opt.precision):
+        with torch.cuda.amp.autocast(enabled=self.opt.amp):
             fake_AB = torch.cat((self.real_A, self.fake_B), 1)  # we use conditional GANs; we need to feed both input and output to the discriminator
             pred_fake = self.netD(fake_AB.detach())
             self.loss_D_fake = self.criterionGAN(pred_fake, False)
@@ -110,7 +110,7 @@ class Pix2PixModel(BaseModel):
     def backward_G(self):
         """Calculate GAN and L1 loss for the generator"""
         # First, G(A) should fake the discriminator
-        with torch.cuda.amp.autocast(dtype=self.opt.precision):
+        with torch.cuda.amp.autocast(enabled=self.opt.amp):
             fake_AB = torch.cat((self.real_A, self.fake_B), 1)
             pred_fake = self.netD(fake_AB)
             self.loss_G_GAN = self.criterionGAN(pred_fake, True)
@@ -121,14 +121,13 @@ class Pix2PixModel(BaseModel):
         self.scaler.scale(self.loss_G).backward()
 
     def optimize_parameters(self):
-        with torch.cuda.amp.autocast(dtype=self.opt.precision):
+        with torch.cuda.amp.autocast(enabled=self.opt.amp):
             self.forward()                   # compute fake images: G(A)
         # update D
         self.set_requires_grad(self.netD, True)  # enable backprop for D
         self.optimizer_D.zero_grad()     # set D's gradients to zero
         self.backward_D()                # calculate gradients for D
         self.scaler.step(self.optimizer_D)  # udpate D's weights
-        self.scaler.update()                # Updates the scale for next iteration 
         # update G
         self.set_requires_grad(self.netD, False)  # D requires no gradients when optimizing G
         self.optimizer_G.zero_grad()        # set G's gradients to zero

@@ -82,7 +82,7 @@ class CUTModel(BaseModel):
             self.netD = networks.define_D(opt.output_nc, opt.ndf, opt.netD, opt.n_layers_D, opt.normD, opt.init_type, opt.init_gain, opt.no_antialias, self.gpu_ids, opt)
             self.networks.extend([self.netD, self.netF])
             # define loss functions
-            self.criterionGAN = networks.GANLoss(opt.gan_mode).to(self.device)
+            self.criterionGAN = networks.GANLoss(opt.gan_mode, dtype=torch.float16 if opt.amp else torch.float32).to(self.device)
             self.criterionNCE = []
 
             for nce_layer in self.nce_layers:
@@ -101,7 +101,7 @@ class CUTModel(BaseModel):
         initialized at the first feedforward pass with some input images.
         Please also see PatchSampleF.create_mlp(), which is called at the first forward() call.
         """
-        with torch.cuda.amp.autocast(dtype=self.opt.precision):
+        with torch.cuda.amp.autocast(enabled=self.opt.amp):
             self.set_input(data)
             bs_per_gpu = self.real_A.size(0) // max(len(self.opt.gpu_ids), 1)
             self.real_A = self.real_A[:bs_per_gpu]
@@ -117,18 +117,15 @@ class CUTModel(BaseModel):
     def optimize_parameters(self):
         # forward
         # Casts operations to mixed precision
-        with torch.cuda.amp.autocast(dtype=self.opt.precision):
+        with torch.cuda.amp.autocast(enabled=self.opt.amp):
             self.forward()
-
-        # update D
-        self.set_requires_grad(self.netD, True)
-        self.optimizer_D.zero_grad()
-        with torch.cuda.amp.autocast(dtype=self.opt.precision):
+            # update D
+            self.set_requires_grad(self.netD, True)
+            self.optimizer_D.zero_grad()
             self.loss_D = self.compute_D_loss()
         self.scaler.scale(self.loss_D).backward()
         self.scaler.step(self.optimizer_D)
         # Updates the scale for next iteration
-        self.scaler.update()
         torch.cuda.empty_cache()
 
         # update G
@@ -136,16 +133,15 @@ class CUTModel(BaseModel):
         self.optimizer_G.zero_grad()
         if self.opt.netF == 'mlp_sample' and self.opt.lambda_NCE>0:
             self.optimizer_F.zero_grad()
-        with torch.cuda.amp.autocast(dtype=self.opt.precision):
+        with torch.cuda.amp.autocast(enabled=self.opt.amp):
             self.loss_G = self.compute_G_loss()
         self.scaler.scale(self.loss_G).backward()
         self.scaler.step(self.optimizer_G)
         # Updates the scale for next iteration
-        self.scaler.update()
         if self.opt.netF == 'mlp_sample' and self.opt.lambda_NCE>0:
             self.scaler.step(self.optimizer_F)
             # Updates the scale for next iteration
-            self.scaler.update()
+        self.scaler.update()
 
     def set_input(self, input):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
@@ -202,12 +198,12 @@ class CUTModel(BaseModel):
             self.loss_G_GAN = 0.0
 
         if self.opt.lambda_NCE > 0.0:
-            self.loss_NCE = self.calculate_NCE_loss(self.real_A_feats, self.fake_B)
+            self.loss_NCE = self.calculate_NCE_loss(self.real_A, self.fake_B)
         else:
             self.loss_NCE, self.loss_NCE_bd = 0.0, 0.0
 
         if self.opt.nce_idt and self.opt.lambda_NCE > 0.0:
-            self.loss_NCE_Y = self.calculate_NCE_loss(self.real_B_feats, self.idt_B)
+            self.loss_NCE_Y = self.calculate_NCE_loss(self.real_B, self.idt_B)
             loss_NCE_both = (self.loss_NCE + self.loss_NCE_Y) * 0.5
         else:
             loss_NCE_both = self.loss_NCE
@@ -215,14 +211,14 @@ class CUTModel(BaseModel):
         self.loss_G = self.loss_G_GAN + loss_NCE_both
         return self.loss_G
 
-    def calculate_NCE_loss(self, feat_k, tgt):
+    def calculate_NCE_loss(self, src, tgt):
         n_layers = len(self.nce_layers)
         feat_q = self.netG(tgt, self.nce_layers, encode_only=True)
 
         if self.opt.flip_equivariance and self.flipped_for_equivariance:
             feat_q = [torch.flip(fq, [3]) for fq in feat_q]
 
-        # feat_k = self.netG(src, self.nce_layers, encode_only=True)
+        feat_k = self.netG(src, self.nce_layers, encode_only=True)
         feat_k_pool, sample_ids = self.netF(feat_k, self.opt.num_patches, None)
         feat_q_pool, _ = self.netF(feat_q, self.opt.num_patches, sample_ids)
 

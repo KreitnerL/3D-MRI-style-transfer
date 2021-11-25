@@ -30,7 +30,7 @@ class BaseOptions():
         parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='models are saved here')
         parser.add_argument('--mean', type=float, default=127.5, help='Mean of source dataset')
         parser.add_argument('--std', type=float, default=50, help='Standard Deviation of target dataset')
-        parser.add_argument('--precision', type=int, default=32, choices=[16, 32], help='The precision used for all calculations')
+        parser.add_argument('--amp', action='store_true', help='Use automated mixed precision with float16 computation')
         # model parameters
         parser.add_argument('--model', type=str, default='cut', help='chooses which model to use.')
         parser.add_argument('--bayesian', action='store_true', help='Use bayesian weight layers to produce confidence map')
@@ -171,7 +171,6 @@ class BaseOptions():
                 opt.gpu_ids.append(id)
         if len(opt.gpu_ids) > 0:
             torch.cuda.set_device(opt.gpu_ids[0])
-        opt.precision = torch.float32 if opt.precision == 32 else torch.float16
 
         self.opt = opt
         return self.opt
