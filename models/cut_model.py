@@ -82,7 +82,7 @@ class CUTModel(BaseModel):
             self.netD = networks.define_D(opt.output_nc, opt.ndf, opt.netD, opt.n_layers_D, opt.normD, opt.init_type, opt.init_gain, opt.no_antialias, self.gpu_ids, opt)
             self.networks.extend([self.netD, self.netF])
             # define loss functions
-            self.criterionGAN = networks.GANLoss(opt.gan_mode).to(self.device)
+            self.criterionGAN = networks.GANLoss(opt.gan_mode, dtype=torch.float16 if opt.amp else torch.float32).to(self.device)
             self.criterionNCE = []
 
             for nce_layer in self.nce_layers:
@@ -101,39 +101,47 @@ class CUTModel(BaseModel):
         initialized at the first feedforward pass with some input images.
         Please also see PatchSampleF.create_mlp(), which is called at the first forward() call.
         """
-        self.set_input(data)
-        bs_per_gpu = self.real_A.size(0) // max(len(self.opt.gpu_ids), 1)
-        self.real_A = self.real_A[:bs_per_gpu]
-        self.real_B = self.real_B[:bs_per_gpu]
-        self.forward()                     # compute fake images: G(A)
-        if self.opt.isTrain:
-            self.compute_D_loss().backward()                  # calculate gradients for D
-            self.compute_G_loss().backward()                   # calculate graidents for G
-            if self.opt.lambda_NCE > 0.0:
-                self.optimizer_F = torch.optim.Adam(self.netF.parameters(), lr=self.opt.lr, betas=(self.opt.beta1, self.opt.beta2))
-                self.optimizers.append(self.optimizer_F)
-            
+        with torch.cuda.amp.autocast(enabled=self.opt.amp):
+            self.set_input(data)
+            bs_per_gpu = self.real_A.size(0) // max(len(self.opt.gpu_ids), 1)
+            self.real_A = self.real_A[:bs_per_gpu]
+            self.real_B = self.real_B[:bs_per_gpu]
+            self.forward()                     # compute fake images: G(A)
+            if self.opt.isTrain:
+                self.compute_D_loss()                # calculate gradients for D
+                self.compute_G_loss()                   # calculate graidents for G
+                if self.opt.lambda_NCE > 0.0:
+                    self.optimizer_F = torch.optim.Adam(self.netF.parameters(), lr=self.opt.lr, betas=(self.opt.beta1, self.opt.beta2))
+                    self.optimizers.append(self.optimizer_F)
+
     def optimize_parameters(self):
         # forward
-        self.forward()
-
-        # update D
-        self.set_requires_grad(self.netD, True)
-        self.optimizer_D.zero_grad()
-        self.loss_D = self.compute_D_loss()
-        self.loss_D.backward()
-        self.optimizer_D.step()
+        # Casts operations to mixed precision
+        with torch.cuda.amp.autocast(enabled=self.opt.amp):
+            self.forward()
+            # update D
+            self.set_requires_grad(self.netD, True)
+            self.optimizer_D.zero_grad()
+            self.loss_D = self.compute_D_loss()
+        self.scaler.scale(self.loss_D).backward()
+        self.scaler.step(self.optimizer_D)
+        # Updates the scale for next iteration
+        torch.cuda.empty_cache()
 
         # update G
         self.set_requires_grad(self.netD, False)
         self.optimizer_G.zero_grad()
         if self.opt.netF == 'mlp_sample' and self.opt.lambda_NCE>0:
             self.optimizer_F.zero_grad()
-        self.loss_G = self.compute_G_loss()
-        self.loss_G.backward()
-        self.optimizer_G.step()
+        with torch.cuda.amp.autocast(enabled=self.opt.amp):
+            self.loss_G = self.compute_G_loss()
+        self.scaler.scale(self.loss_G).backward()
+        self.scaler.step(self.optimizer_G)
+        # Updates the scale for next iteration
         if self.opt.netF == 'mlp_sample' and self.opt.lambda_NCE>0:
-            self.optimizer_F.step()
+            self.scaler.step(self.optimizer_F)
+            # Updates the scale for next iteration
+        self.scaler.update()
 
     def set_input(self, input):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
@@ -147,17 +155,6 @@ class CUTModel(BaseModel):
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
 
     def forward(self):
-        # """Run forward pass; called by both functions <optimize_parameters> and <test>."""
-        # self.real = torch.cat((self.real_A, self.real_B), dim=0) if self.opt.nce_idt and self.opt.isTrain else self.real_A
-        # if self.opt.flip_equivariance:
-        #     self.flipped_for_equivariance = self.opt.isTrain and (np.random.random() < 0.5)
-        #     if self.flipped_for_equivariance:
-        #         self.real = torch.flip(self.real, [3])
-
-        # self.fake = self.netG(self.real)
-        # self.fake_B = self.fake[:self.real_A.size(0)]
-        # if self.opt.nce_idt:
-        #     self.idt_B = self.fake[self.real_A.size(0):]
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         real_A_in = self.real_A
         if self.opt.nce_idt and self.opt.isTrain:
@@ -168,8 +165,13 @@ class CUTModel(BaseModel):
                 real_A_in = torch.flip(self.real_A, [3])
                 if self.opt.nce_idt and self.opt.isTrain:
                     real_B_in = torch.flip(self.real_B, [3])
-        self.fake_B = self.netG(real_A_in)
-        if self.opt.nce_idt and self.opt.isTrain:
+        if self.opt.lambda_NCE and self.opt.phase == 'train':
+            self.fake_B, self.real_A_feats = self.netG(real_A_in, self.nce_layers)
+        else:
+            self.fake_B = self.netG(real_A_in)
+        if self.opt.lambda_NCE and self.opt.nce_idt and self.opt.isTrain:
+            self.idt_B, self.real_B_feats = self.netG(real_B_in, self.nce_layers)
+        elif self.opt.nce_idt and self.opt.isTrain:
             self.idt_B = self.netG(real_B_in)
 
     def compute_D_loss(self):
@@ -188,10 +190,9 @@ class CUTModel(BaseModel):
 
     def compute_G_loss(self):
         """Calculate GAN and NCE loss for the generator"""
-        fake = self.fake_B
         # First, G(A) should fake the discriminator
         if self.opt.lambda_GAN > 0.0:
-            pred_fake = self.netD(fake)
+            pred_fake = self.netD(self.fake_B)
             self.loss_G_GAN = self.criterionGAN(pred_fake, True).mean() * self.opt.lambda_GAN
         else:
             self.loss_G_GAN = 0.0

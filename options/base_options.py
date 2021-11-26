@@ -30,6 +30,7 @@ class BaseOptions():
         parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='models are saved here')
         parser.add_argument('--mean', type=float, default=127.5, help='Mean of source dataset')
         parser.add_argument('--std', type=float, default=50, help='Standard Deviation of target dataset')
+        parser.add_argument('--amp', action='store_true', help='Use automated mixed precision with float16 computation')
         # model parameters
         parser.add_argument('--model', type=str, default='cut', help='chooses which model to use.')
         parser.add_argument('--bayesian', action='store_true', help='Use bayesian weight layers to produce confidence map')
@@ -44,7 +45,7 @@ class BaseOptions():
         parser.add_argument('--n_layers_D', type=int, default=3, help='only used if netD==n_layers')
         parser.add_argument('--normG', type=str, default='instance', choices=['instance', 'batch', 'none'], help='instance normalization or batch normalization for G')
         parser.add_argument('--normD', type=str, default='instance', choices=['instance', 'batch', 'none'], help='instance normalization or batch normalization for D')
-        parser.add_argument('--init_type', type=str, default='xavier', choices=['normal', 'xavier', 'kaiming', 'orthogonal'], help='network initialization')
+        parser.add_argument('--init_type', type=str, default='kaiming', choices=['normal', 'xavier', 'kaiming', 'orthogonal'], help='network initialization')
         parser.add_argument('--init_gain', type=float, default=0.02, help='scaling factor for normal, xavier and orthogonal.')
         parser.add_argument('--no_dropout', type=util.str2bool, nargs='?', const=True, default=True,
                             help='no dropout for the generator')

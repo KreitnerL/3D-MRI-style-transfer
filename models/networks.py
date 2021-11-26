@@ -401,7 +401,7 @@ def define_F(input_nc, netF, norm='batch', use_dropout=False, init_type='normal'
         net = StridedConvF(init_type=init_type, init_gain=init_gain, gpu_ids=gpu_ids)
     else:
         raise NotImplementedError('projection model name [%s] is not recognized' % netF)
-    return init_net(net, init_type, init_gain, gpu_ids)
+    return init_net(net, init_type, init_gain, gpu_ids, nonlinearity='relu')
 
 
 def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', init_type='normal', init_gain=0.02, no_antialias=False, gpu_ids=[], opt=None):
@@ -529,7 +529,7 @@ class GANLoss(nn.Module):
     that has the same size as the input.
     """
 
-    def __init__(self, gan_mode, target_real_label=1.0, target_fake_label=0.0):
+    def __init__(self, gan_mode, target_real_label=1.0, target_fake_label=0.0, dtype=torch.float32):
         """ Initialize the GANLoss class.
 
         Parameters:
@@ -541,8 +541,8 @@ class GANLoss(nn.Module):
         LSGAN needs no sigmoid. vanilla GANs will handle it with BCEWithLogitsLoss.
         """
         super(GANLoss, self).__init__()
-        self.register_buffer('real_label', torch.tensor(target_real_label))
-        self.register_buffer('fake_label', torch.tensor(target_fake_label))
+        self.register_buffer('real_label', torch.tensor(target_real_label, dtype=dtype))
+        self.register_buffer('fake_label', torch.tensor(target_fake_label, dtype=dtype))
         self.gan_mode = gan_mode
         if gan_mode == 'lsgan':
             self.loss = nn.MSELoss()
@@ -1172,7 +1172,7 @@ class ResnetGenerator(nn.Module):
                           nn.ReLU(True)]
         model += [get_pad_layer('refl')(3)]
         model += [conv(ngf, output_nc, kernel_size=7, padding=0)]
-        model += [nn.Tanh()]
+        model += [nn.Sigmoid()]
 
         self.model = nn.Sequential(*model)
 
@@ -1199,7 +1199,7 @@ class ResnetGenerator(nn.Module):
         else:
             """Standard forward"""
             fake = self.model(input)
-            fake = ((fake+1)/2)*255.
+            fake = fake*255.
             fake = (fake-self.opt.mean) / self.opt.std
             return fake
 
@@ -1602,7 +1602,7 @@ class ObeliskLayer(nn.Module):
     Taken from https://github.com/mattiaspaul/OBELISK
     Defines the OBELISK layer that performs deformable convolution with the given number of trainable spatial offsets and a 5 layer 1x1 Dense-Net. The tensor after this layer will be interpolated the input tensor shape using trilinear interpolation
     """
-    def __init__(self, C: tuple, down_scale_factor: int=1, K: int = 128, denseNetLayers: int = 4, init_type='xavier', upscale=True):
+    def __init__(self, C: tuple, down_scale_factor: int=1, K: int = 128, denseNetLayers: int = 4, init_type='xavier', upscale=True, activation=nn.ReLU):
         """
         Creates an OBELISK layer that performs deformable convolution with the given number of trainable spatial offsets and a 5 layer 1x1 Dense-Net. The tensor after this layer will be interpolated the input tensor shape using trilinear interpolation
 
@@ -1625,19 +1625,19 @@ class ObeliskLayer(nn.Module):
         self.offset = nn.Parameter(torch.randn(1,K,*[1]*(dimensions-1),dimensions)*0.05)
 
         # Dense-Net with 1x1x1 kernels
-        self.conv1 = nn.Sequential(conv(C_in*K,C_mid,1,groups=4,bias=False), nn.ReLU(True))
+        self.conv1 = nn.Sequential(conv(C_in*K,C_mid,1,groups=4,bias=False), activation(True))
         # self.conv2 = nn.Sequential(batchNorm(128), conv(128,32,1,bias=False), nn.ReLU(True))
         self.denseNet = nn.ModuleList([])
         C = C_mid
         for i in range(denseNetLayers):
-            self.denseNet.append(nn.Sequential(norm(C), conv(C,32,1,bias=False), nn.ReLU(True)))
+            self.denseNet.append(nn.Sequential(norm(C), conv(C,32,1,bias=False), activation(True)))
             C+=32
-        self.conv3 = nn.Sequential(norm(C), conv(C,C_out,1,bias=False), nn.ReLU(True))
+        self.conv3 = nn.Sequential(norm(C), conv(C,C_out,1,bias=False), activation(True))
 
-    def create_grid(self, quarter_res):
+    def create_grid(self, quarter_res, device):
         grid_base = [2,3] if dimensions==2 else [3,4]
         # Obelisk sample_grid: 1 x 1 x #samples x 1 x 3
-        self.sample_grid = F.affine_grid(torch.eye(*grid_base).unsqueeze(0), torch.Size((1,1,*quarter_res))).view(1,1,-1,*[1]*(dimensions-2),dimensions).detach()
+        self.sample_grid = F.affine_grid(torch.eye(*grid_base, device=device).unsqueeze(0), torch.Size((1,1,*quarter_res))).view(1,1,-1,*[1]*(dimensions-2),dimensions).detach()
         self.sample_grid.requires_grad = False
         self.grid_initialized_with = quarter_res
 
@@ -1646,12 +1646,11 @@ class ObeliskLayer(nn.Module):
         quarter_res = list(map(lambda x: int(x/(self.down_scale_factor*4)), x.shape[2:]))
 
         if self.grid_initialized_with != quarter_res:
-            self.create_grid(quarter_res)
+            self.create_grid(quarter_res, x.device)
         B = x.size()[0]
-        device = x.device
 
         # Obelisk Layer
-        x = F.grid_sample(x, (self.sample_grid.to(device).repeat(B,1,*[1]*dimensions) + self.offset), align_corners=True).view(B,-1,*quarter_res)
+        x = F.grid_sample(x, (self.sample_grid.repeat(B,1,*[1]*dimensions) + self.offset), align_corners=True).view(B,-1,*quarter_res)
         x = self.conv1(x)
 
         # Dense-Net with 1x1x1 kernels
@@ -1702,7 +1701,8 @@ class ObeliskDiscriminator(nn.Module):
             conv(C_in, 64, kernel_size=3, stride=2, padding=1),
             norm(64),
             nn.LeakyReLU(0.05),
-            ObeliskLayer((64,128,128), down_scale_factor=1, K=128, upscale=False),
+            ObeliskLayer((64,128,128), down_scale_factor=1, K=128,
+                        upscale=False, activation=nn.LeakyReLU),
             norm(128),
             nn.LeakyReLU(0.05),
             conv(128, 1, kernel_size=3, stride=1, padding=1),
@@ -1775,7 +1775,6 @@ class ObeliskHybridGenerator(nn.Module):
     def forward(self, x: torch.Tensor, layers=[], encode_only=False):
         size = x.size()
         half_res = list(map(lambda x: int(x/2), size[2:]))
-        leakage = 0.05 #leaky ReLU used for conventional CNNs
         all_feats=[]
 
         x0 = self.model0(x)
@@ -1810,7 +1809,8 @@ class ObeliskHybridGenerator(nn.Module):
         x = torch.sigmoid(x)
         x = x*255.
         x = (x-self.mean) / self.std
-        if len(layers)>0:
+
+        if len(layers) > 0:
             return x, feats
         return x
 
@@ -1869,20 +1869,19 @@ class obeliskhybrid_visceral(nn.Module):
         self.batch6U = batchNorm(32)
         self.conv8 = conv(32, num_labels, 1)
         
-    def forward(self, inputImg: torch.Tensor):
+    def forward(self, inputImg: torch.Tensor, layers=[], encode_only=False):
         half_res = list(map(lambda x: int(x/2), inputImg.shape[2:]))
         quarter_res = list(map(lambda x: int(x/4), inputImg.shape[2:]))
         eighth_res = list(map(lambda x: int(x/8), inputImg.shape[2:]))
 
-        if not self.initialized:
-            self.sample_grid1 = F.affine_grid(torch.eye(3,4).unsqueeze(0),torch.Size((1,1,*quarter_res))).view(1,1,-1,1,3).detach()
-            self.sample_grid1.requires_grad = False
-            self.sample_grid2 = F.affine_grid(torch.eye(3,4).unsqueeze(0),torch.Size((1,1,*eighth_res))).view(1,1,-1,1,3).detach()
-            self.sample_grid2.requires_grad = False
-            self.initialized = True
+        # if not self.initialized:
+        self.sample_grid1 = F.affine_grid(torch.eye(3,4, device=inputImg.device).unsqueeze(0),torch.Size((1,1,*quarter_res))).view(1,1,-1,1,3).detach()
+        self.sample_grid1.requires_grad = False
+        self.sample_grid2 = F.affine_grid(torch.eye(3,4, device=inputImg.device).unsqueeze(0),torch.Size((1,1,*eighth_res))).view(1,1,-1,1,3).detach()
+        self.sample_grid2.requires_grad = False
+            # self.initialized = True
     
         B,C,D,H,W = inputImg.size()
-        device = inputImg.device
         leakage = 0.05 #leaky ReLU used for conventional CNNs
         
         #unet-encoder
@@ -1895,7 +1894,7 @@ class obeliskhybrid_visceral(nn.Module):
         
         #in this model two obelisk layers with fewer spatial offsets are used
         #obelisk layer 1
-        x_o1 = F.grid_sample(x1, (self.sample_grid1.to(device).repeat(B,1,1,1,1) + self.offset1)).view(B,-1,*quarter_res)
+        x_o1 = F.grid_sample(x1, (self.sample_grid1.repeat(B,1,1,1,1) + self.offset1)).view(B,-1,*quarter_res)
         #1x1 kernel dense-net
         x_o1 = F.relu(self.linear1a(x_o1))
         x_o1a = torch.cat((x_o1,F.relu(self.linear1b(self.batch1a(x_o1)))),dim=1)
@@ -1905,7 +1904,7 @@ class obeliskhybrid_visceral(nn.Module):
         x_o1 = F.interpolate(x_o1d, size=[*half_res], mode='trilinear', align_corners=False)
         
         #obelisk layer 2
-        x_o2 = F.grid_sample(x00, (self.sample_grid2.to(device).repeat(B,1,1,1,1) + self.offset2)).view(B,-1,*eighth_res)
+        x_o2 = F.grid_sample(x00, (self.sample_grid2.repeat(B,1,1,1,1) + self.offset2)).view(B,-1,*eighth_res)
         x_o2 = F.relu(self.linear2a(x_o2))
         #1x1 kernel dense-net
         x_o2a = torch.cat((x_o2,F.relu(self.linear2b(self.batch2a(x_o2)))),dim=1)
@@ -1914,12 +1913,20 @@ class obeliskhybrid_visceral(nn.Module):
         x_o2d = F.relu(self.linear2e(self.batch2d(x_o2c)))
         x_o2 = F.interpolate(x_o2d, size=[*quarter_res], mode='trilinear', align_corners=False)
 
+        if encode_only:
+            all_feats = [x_o2, x1, x_o1, x2, x]
+            feats = []
+            for i,feat in enumerate(all_feats):
+                if i in layers:
+                    feats.append(feat)
+            return feats
+
         #unet-decoder
         x = F.leaky_relu(self.batch6bU(self.conv6bU(torch.cat((x,x_o2),1))),leakage)
         x = F.interpolate(x, size=[*half_res], mode='trilinear', align_corners=False)
         x = F.leaky_relu(self.batch6U(self.conv6U(torch.cat((x,x_o1,x2),1))),leakage)
         x = F.interpolate(self.conv8(x), size=[D,H,W], mode='trilinear', align_corners=False)
-        x = torch.tanh(x)
-        x = ((x+1)/2)*255.
+        x = torch.sigmoid(x)
+        x = x*255.
         x = (x-self.mean) / self.std
         return x

@@ -4,6 +4,7 @@ from PIL import Image
 import random
 from torchvision import transforms
 import os
+import torch
 import numpy as np
 from data.mri_dataset import PadIfNecessary, SpatialFlip, SpatialRotation
 from models.networks import setDimensions
@@ -20,6 +21,7 @@ class ImageCTDataset(BaseDataset):
 
         self.transformations = [
             transforms.ToTensor(),
+            transforms.Lambda(lambda x: x.type(torch.float16 if opt.amp else torch.float32)),
             PadIfNecessary(opt.n_downsampling),
             transforms.Lambda(lambda x: self.center(x, opt.mean, opt.std)),
         ]
