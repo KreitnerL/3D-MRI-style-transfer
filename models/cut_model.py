@@ -106,13 +106,14 @@ class CUTModel(BaseModel):
             bs_per_gpu = self.real_A.size(0) // max(len(self.opt.gpu_ids), 1)
             self.real_A = self.real_A[:bs_per_gpu]
             self.real_B = self.real_B[:bs_per_gpu]
-            self.forward()                     # compute fake images: G(A)
-            if self.opt.isTrain:
-                self.compute_D_loss()                # calculate gradients for D
-                self.compute_G_loss()                   # calculate graidents for G
-                if self.opt.lambda_NCE > 0.0:
-                    self.optimizer_F = torch.optim.Adam(self.netF.parameters(), lr=self.opt.lr, betas=(self.opt.beta1, self.opt.beta2))
-                    self.optimizers.append(self.optimizer_F)
+            with torch.no_grad():
+                self.forward()                     # compute fake images: G(A)
+                if self.opt.isTrain:
+                    self.compute_D_loss()                # calculate gradients for D
+                    self.compute_G_loss()                   # calculate gradients for G
+                    if self.opt.lambda_NCE > 0.0:
+                        self.optimizer_F = torch.optim.Adam(self.netF.parameters(), lr=self.opt.lr, betas=(self.opt.beta1, self.opt.beta2))
+                        self.optimizers.append(self.optimizer_F)
 
     def optimize_parameters(self):
         # forward
@@ -171,8 +172,6 @@ class CUTModel(BaseModel):
             self.fake_B = self.netG(real_A_in)
         if self.opt.lambda_NCE and self.opt.nce_idt and self.opt.isTrain:
             self.idt_B, self.real_B_feats = self.netG(real_B_in, self.nce_layers)
-        elif self.opt.nce_idt and self.opt.isTrain:
-            self.idt_B = self.netG(real_B_in)
 
     def compute_D_loss(self):
         """Calculate GAN loss for the discriminator"""
@@ -198,12 +197,12 @@ class CUTModel(BaseModel):
             self.loss_G_GAN = 0.0
 
         if self.opt.lambda_NCE > 0.0:
-            self.loss_NCE = self.calculate_NCE_loss(self.real_A, self.fake_B)
+            self.loss_NCE = self.calculate_NCE_loss(self.real_A_feats, self.fake_B)
         else:
             self.loss_NCE, self.loss_NCE_bd = 0.0, 0.0
 
         if self.opt.nce_idt and self.opt.lambda_NCE > 0.0:
-            self.loss_NCE_Y = self.calculate_NCE_loss(self.real_B, self.idt_B)
+            self.loss_NCE_Y = self.calculate_NCE_loss(self.real_B_feats, self.idt_B)
             loss_NCE_both = (self.loss_NCE + self.loss_NCE_Y) * 0.5
         else:
             loss_NCE_both = self.loss_NCE
@@ -211,14 +210,14 @@ class CUTModel(BaseModel):
         self.loss_G = self.loss_G_GAN + loss_NCE_both
         return self.loss_G
 
-    def calculate_NCE_loss(self, src, tgt):
+    def calculate_NCE_loss(self, feat_k, tgt):
         n_layers = len(self.nce_layers)
         feat_q = self.netG(tgt, self.nce_layers, encode_only=True)
 
         if self.opt.flip_equivariance and self.flipped_for_equivariance:
             feat_q = [torch.flip(fq, [3]) for fq in feat_q]
 
-        feat_k = self.netG(src, self.nce_layers, encode_only=True)
+        # feat_k = self.netG(src, self.nce_layers, encode_only=True)
         feat_k_pool, sample_ids = self.netF(feat_k, self.opt.num_patches, None)
         feat_q_pool, _ = self.netF(feat_q, self.opt.num_patches, sample_ids)
 
