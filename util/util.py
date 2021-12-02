@@ -185,16 +185,21 @@ def correct_resize(t, size, mode=Image.BICUBIC):
         resized.append(resized_t)
     return torch.stack(resized, dim=0).to(device)
 
-def val_log_2_png(path: str):
-    folder_path = os.path.dirname(path)
-    name = os.path.basename(folder_path)
+def load_val_log(path: str):
     val = []
     with open(path) as f:
         lines = [line.rstrip() for line in f]
     for line in lines:
         if line.startswith('='):
+            val = []
             continue
         val.append(float(line.split(': ')[-1]))
+    return val
+
+def val_log_2_png(path: str):
+    folder_path = os.path.dirname(path)
+    name = os.path.basename(folder_path)
+    val = load_val_log(path)
     plt.figure()
     plt.plot(val)
     plt.title(name)
@@ -207,7 +212,7 @@ def val_log_2_png(path: str):
     plt.cla()
     print('Saved plot at', out_path)
 
-def loss_log_2_png(path: str, dataset_size=234):
+def load_loss_log(path: str, dataset_size=0):
     """
     Loads the given loss file, extracts all losses and returns them in a struct
     """
@@ -219,9 +224,12 @@ def loss_log_2_png(path: str, dataset_size=234):
         lines = [line.rstrip() for line in f]
     for line in lines:
         if line.startswith('='):
+            legend = []
+            y = []
+            x = []
             continue
         meta_data = re.sub('\(|\)|\:|\,', '', re.search('\(.*\)', line).group(0)).split()
-        x_i = int(meta_data[1]) + int(meta_data[3])/dataset_size
+        x_i = (int(meta_data[1]) + int(meta_data[3])/dataset_size)-1
         line =  re.sub('\(.*\)', '', line)
         y_i = []
         for t in line.split():
@@ -233,6 +241,13 @@ def loss_log_2_png(path: str, dataset_size=234):
         y.append(y_i)
         x.append(x_i)
         has_legend=True
+    return x, y, legend
+
+def loss_log_2_png(path: str, dataset_size=234):
+    """
+    Loads the given loss file, extracts all losses and returns them in a struct
+    """
+    x, y, legend = load_loss_log(path, dataset_size)
 
     folder_path = os.path.dirname(path)
     name = os.path.basename(folder_path)

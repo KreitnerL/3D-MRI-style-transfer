@@ -2,8 +2,9 @@ import os
 import torch
 from collections import OrderedDict
 from abc import ABC, abstractmethod
+from util.visualizer import Visualizer
 from . import networks
-from util.util import colorFader
+from util.util import colorFader, load_loss_log, load_val_log
 
 
 class BaseModel(ABC):
@@ -102,11 +103,21 @@ class BaseModel(ABC):
         if self.isTrain:
             self.schedulers = [networks.get_scheduler(optimizer, opt) for optimizer in self.optimizers]
         if not self.isTrain or opt.continue_train:
+            if self.opt.isTrain and self.opt.pretrained_name is not None:
+                load_dir = os.path.join(self.opt.checkpoints_dir, self.opt.pretrained_name)
+            else:
+                load_dir = self.save_dir
             load_suffix = opt.epoch
             if opt.checkpoint_path is not None:
                 self.load_checkpoint(opt.checkpoint_path)
             else:
                 self.load_networks(load_suffix)
+        if self.isTrain and opt.continue_train and int(opt.epoch_count) > 0:
+            loss_data = load_loss_log(os.path.join(load_dir, 'loss_log.txt'), opt.dataset_size)
+            y = load_val_log(os.path.join(load_dir, 'val_loss_log.txt'))
+            val_data = (list(range(len(y))), y, ['validation loss'])
+            v: Visualizer = opt.visualizer
+            v.set_plot_data(loss_data, val_data)
 
         self.print_networks(opt.verbose)
         if self.opt.phase=="train":

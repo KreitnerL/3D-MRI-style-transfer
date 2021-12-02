@@ -99,14 +99,16 @@ class Visualizer():
             util.mkdirs([self.web_dir, self.img_dir])
         # create a logging file to store training losses
         self.log_name = os.path.join(opt.checkpoints_dir, opt.name, 'loss_log.txt')
-        with open(self.log_name, "a") as log_file:
-            now = time.strftime("%c")
-            log_file.write('================ Training Loss (%s) ================\n' % now)
+        if not opt.continue_train:
+            with open(self.log_name, "a") as log_file:
+                now = time.strftime("%c")
+                log_file.write('================ Training Loss (%s) ================\n' % now)
         self.loss_plot_name = os.path.join(opt.checkpoints_dir, opt.name, 'train_loss.png')
         self.val_loss_log_name = os.path.join(opt.checkpoints_dir, opt.name, 'val_loss_log.txt')
-        with open(self.val_loss_log_name, "a") as log_file:
-            now = time.strftime("%c")
-            log_file.write('================ Validation Loss (%s) ================\n' % now)
+        if not opt.continue_train:
+            with open(self.val_loss_log_name, "a") as log_file:
+                now = time.strftime("%c")
+                log_file.write('================ Validation Loss (%s) ================\n' % now)
         self.val_plot_name = os.path.join(opt.checkpoints_dir, opt.name, 'val.png')
 
 
@@ -205,6 +207,17 @@ class Visualizer():
                     links.append(img_path)
                 webpage.add_images(ims, txts, links, width=self.win_size)
             webpage.save()
+
+    def set_plot_data(self, loss_data, val_loss_data):
+        x, y, legend = loss_data
+        plot_name = '_'.join(legend)
+
+        self.plot_data[plot_name] = {'X': x, 'Y': y, 'legend': legend}
+
+        x, y, legend = val_loss_data
+        plot_name = 'validation_loss'
+        self.plot_data[plot_name] = {'X': x, 'Y': y, 'legend': legend}
+
 
     def plot_current_losses(self, epoch, counter_ratio, losses):
         """display the current losses on visdom display: dictionary of error labels and values
