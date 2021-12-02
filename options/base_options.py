@@ -31,6 +31,7 @@ class BaseOptions():
         parser.add_argument('--mean', type=float, default=127.5, help='Mean of source dataset')
         parser.add_argument('--std', type=float, default=50, help='Standard Deviation of target dataset')
         parser.add_argument('--amp', action='store_true', help='Use automated mixed precision with float16 computation')
+        parser.add_argument('--checkpoint_path', type=str, default=None, help='path to specific checkpoint file')
         # model parameters
         parser.add_argument('--model', type=str, default='cut', help='chooses which model to use.')
         parser.add_argument('--bayesian', action='store_true', help='Use bayesian weight layers to produce confidence map')
@@ -40,7 +41,7 @@ class BaseOptions():
         parser.add_argument('--ngf', type=int, default=64, help='# of gen filters in the last conv layer')
         parser.add_argument('--ndf', type=int, default=64, help='# of discrim filters in the first conv layer')
         parser.add_argument('--netD', type=str, default='basic', choices=['basic', 'obelisk', 'n_layers', 'pixel', 'patch', 'tilestylegan2', 'stylegan2'], help='specify discriminator architecture. The basic model is a 70x70 PatchGAN. n_layers allows you to specify the layers in the discriminator')
-        parser.add_argument('--netG', type=str, default='resnet', choices=['resnet', 'obelisk', 'unet_256', 'unet_128', 'stylegan2', 'smallstylegan2', 'resnet_cat'], help='specify generator architecture')
+        parser.add_argument('--netG', type=str, default='resnet', choices=['resnet', 'obelisk', 'obelisk-resnet', 'unet_256', 'unet_128', 'stylegan2', 'smallstylegan2', 'resnet_cat'], help='specify generator architecture')
         parser.add_argument('--n_downsampling', type=int, default=2, help='# downsampling layers in the generator')
         parser.add_argument('--n_layers_D', type=int, default=3, help='only used if netD==n_layers')
         parser.add_argument('--normG', type=str, default='instance', choices=['instance', 'batch', 'none'], help='instance normalization or batch normalization for G')

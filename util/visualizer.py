@@ -193,7 +193,7 @@ class Visualizer():
 
             # update website
             webpage = html.HTML(self.web_dir, 'Experiment name = %s' % self.name, refresh=0)
-            for n in range(epoch, 0, -1):
+            for n in range(epoch, 0, -self.opt.update_html_freq):
                 webpage.add_header('epoch [%d]' % n)
                 ims, txts, links = [], [], []
 
