@@ -1176,10 +1176,8 @@ class ResnetGenerator(nn.Module):
 
         self.model = nn.Sequential(*model)
 
-    def forward(self, input, layers=[], encode_only=False):
-        if -1 in layers:
-            layers.append(len(self.model))
-        if len(layers) > 0:
+    def forward(self, input, layers, encode_only=False):
+        if layers is not None:
             feat = input
             feats = []
             for layer_id, layer in enumerate(self.model):
@@ -1602,7 +1600,7 @@ class ObeliskLayer(nn.Module):
     Taken from https://github.com/mattiaspaul/OBELISK
     Defines the OBELISK layer that performs deformable convolution with the given number of trainable spatial offsets and a 5 layer 1x1 Dense-Net. The tensor after this layer will be interpolated the input tensor shape using trilinear interpolation
     """
-    def __init__(self, C: tuple, down_scale_factor: int=1, K: int = 128, denseNetLayers: int = 4, init_type='xavier', upscale=True, activation=nn.ReLU):
+    def __init__(self, C: tuple, down_scale_factor: int=1, K: int = 128, denseNetLayers: int = 4, upscale=True, activation=nn.ReLU):
         """
         Creates an OBELISK layer that performs deformable convolution with the given number of trainable spatial offsets and a 5 layer 1x1 Dense-Net. The tensor after this layer will be interpolated the input tensor shape using trilinear interpolation
 
@@ -1614,7 +1612,6 @@ class ObeliskLayer(nn.Module):
         super().__init__()
         C_in, C_mid, C_out = C
         self.down_scale_factor = down_scale_factor
-        self.init_type = init_type
         self.grid_initialized_with = 0
         self.sample_grid = None
         self.upscale = upscale
@@ -1772,7 +1769,7 @@ class ObeliskHybridGenerator(nn.Module):
             *get_cbam(32, 2)
         )
 
-    def forward(self, x: torch.Tensor, layers=[], encode_only=False):
+    def forward(self, x: torch.Tensor, layers=None, encode_only=False):
         size = x.size()
         half_res = list(map(lambda x: int(x/2), size[2:]))
         all_feats=[]
@@ -1793,7 +1790,7 @@ class ObeliskHybridGenerator(nn.Module):
         all_feats.append(x110)
         x110 = self.norm_act110(x110)
 
-        if len(layers)>0:
+        if layers is not None:
             feats = []
             for i,feat in enumerate(all_feats):
                 if i in layers:
@@ -1810,7 +1807,7 @@ class ObeliskHybridGenerator(nn.Module):
         x = x*255.
         x = (x-self.mean) / self.std
 
-        if len(layers) > 0:
+        if layers is not None:
             return x, feats
         return x
 
