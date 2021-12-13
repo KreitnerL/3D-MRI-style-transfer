@@ -87,7 +87,7 @@ class MRIDataset(BaseDataset):
     def toGrayScale(self, x):
         x_min = np.amin(x)
         x_max = np.amax(x) - x_min
-        x = (x - x_min) / x_max * 255.
+        x = (x - x_min) / x_max
         return x
 
     def center(self, x, mean, std):

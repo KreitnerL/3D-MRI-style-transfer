@@ -53,7 +53,7 @@ def find_class_in_module(target_cls_name, module):
     return cls
 
 
-def tensor2im(input_image, mean, std, imtype=np.uint8):
+def tensor2im(input_image, imtype=np.uint8):
     """"Converts a Tensor array into a numpy image array.
 
     Parameters:
@@ -68,7 +68,7 @@ def tensor2im(input_image, mean, std, imtype=np.uint8):
         image_numpy = image_tensor[0].cpu().float().numpy()  # convert it into a numpy array
         if image_numpy.shape[0] == 1:  # grayscale to RGB
             image_numpy = np.tile(image_numpy, (3, 1, 1))
-        image_numpy = (np.transpose(image_numpy, (1, 2, 0))  * std) + mean  # post-processing: tranpose and scaling
+        image_numpy = np.transpose(image_numpy, (1, 2, 0))  * 255  # post-processing: tranpose and scaling
         input_image = torch.clamp(input_image, 0, 255)
     else:  # if it is a numpy array, do nothing
         image_numpy = input_image

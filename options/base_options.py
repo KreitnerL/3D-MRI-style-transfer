@@ -28,8 +28,6 @@ class BaseOptions():
         parser.add_argument('--easy_label', type=str, default='experiment_name', help='Interpretable name')
         parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
         parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='models are saved here')
-        parser.add_argument('--mean', type=float, default=127.5, help='Mean of source dataset')
-        parser.add_argument('--std', type=float, default=50, help='Standard Deviation of target dataset')
         parser.add_argument('--amp', action='store_true', help='Use automated mixed precision with float16 computation')
         parser.add_argument('--checkpoint_path', type=str, default=None, help='path to specific checkpoint file')
         # model parameters

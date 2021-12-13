@@ -23,7 +23,6 @@ class ImageCTDataset(BaseDataset):
             transforms.ToTensor(),
             transforms.Lambda(lambda x: x.type(torch.float16 if opt.amp else torch.float32)),
             PadIfNecessary(opt.n_downsampling),
-            transforms.Lambda(lambda x: self.center(x, opt.mean, opt.std)),
         ]
 
         if(opt.phase == 'train'):

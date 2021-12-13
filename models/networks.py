@@ -368,7 +368,7 @@ def define_G(input_nc, output_nc, ngf, netG, norm='instance', use_dropout=False,
     if netG == 'resnet':
         net = ResnetGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, no_antialias=no_antialias, no_antialias_up=no_antialias_up, n_blocks=opt.ngl, opt=opt)
     elif netG == 'obelisk':
-        net = ObeliskHybridGenerator(output_nc, opt.mean, opt.std)
+        net = ObeliskHybridGenerator(output_nc)
     elif netG == 'obelisk-resnet':
         net = ObeliskResNet((1,64,1), opt.mean, opt.std)
         # net = obeliskhybrid_visceral(1,opt.mean, opt.std)
@@ -1193,12 +1193,12 @@ class ResnetGenerator(nn.Module):
                     # print('encoder only return features')
                     return feats  # return intermediate features alone; stop in the last layers
 
+            if encode_only:
+                return feats
             return feat, feats  # return both output and intermediate features
         else:
             """Standard forward"""
             fake = self.model(input)
-            fake = fake*255.
-            fake = (fake-self.opt.mean) / self.opt.std
             return fake
 
 
@@ -1804,8 +1804,6 @@ class ObeliskHybridGenerator(nn.Module):
         x = self.output2(torch.cat((x,x10,x11),1))
         x = self.conv8(x)
         x = torch.sigmoid(x)
-        x = x*255.
-        x = (x-self.mean) / self.std
 
         if layers is not None:
             return x, feats
@@ -1815,11 +1813,9 @@ class ObeliskHybridGenerator(nn.Module):
 #the layers have 512 and 128 trainable offsets and 230k trainable weights in total
 #trained with pytorch v1.0 for VISCERAL data
 class obeliskhybrid_visceral(nn.Module):
-    def __init__(self, num_labels: int, mean: float, std: float):
+    def __init__(self, num_labels: int):
         super(obeliskhybrid_visceral, self).__init__()
         self.num_labels = num_labels
-        self.mean = mean
-        self.std = std
         self.initialized = False
 
         #U-Net Encoder
@@ -1924,6 +1920,4 @@ class obeliskhybrid_visceral(nn.Module):
         x = F.leaky_relu(self.batch6U(self.conv6U(torch.cat((x,x_o1,x2),1))),leakage)
         x = F.interpolate(self.conv8(x), size=[D,H,W], mode='trilinear', align_corners=False)
         x = torch.sigmoid(x)
-        x = x*255.
-        x = (x-self.mean) / self.std
         return x

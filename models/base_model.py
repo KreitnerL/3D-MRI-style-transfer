@@ -197,7 +197,6 @@ class BaseModel(ABC):
             std_map -= std_map.min(1, keepdim=True)[0]
             std_map /= std_map.max(1, keepdim=True)[0]
             std_map = torch.stack([torch.stack([colorFader(aij) for aij in std_map[i]]) for i in range(shape[0])])
-            std_map = ((std_map * 255.) - self.opt.mean) / self.opt.std
             std_map = std_map.permute(0,2,1)
             std_map = std_map.view(shape[0], 3, *shape[2:])
             visual_ret['confidence'] = std_map
