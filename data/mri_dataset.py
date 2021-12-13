@@ -59,19 +59,19 @@ class PadIfNecessary():
 class MRIDataset(BaseDataset):
     def __init__(self, opt):
         super().__init__(opt)
-        self.A_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, opt.phase + 'T1'), 't1.nii.gz'))
-        self.B_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, opt.phase + 'T2'), 't2.nii.gz'))
+        self.A_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 'mri', opt.phase), '.nii.gz'))
+        self.B_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 'ct', opt.phase), '.nii.gz'))
         self.A_size = len(self.A_paths)  # get the size of dataset A
         self.B_size = len(self.B_paths)  # get the size of dataset B
         setDimensions(3, opt.bayesian)
 
         self.transformations = [
-            transforms.Lambda(lambda x: x[:,48:240,80:240,36:260]), # 192x160x224
-            transforms.Lambda(lambda x: resize(x, (x.shape[0],96,80,112), order=1, anti_aliasing=True)),
+            # transforms.Lambda(lambda x: x[:,48:240,80:240,36:260]), # 192x160x224
+            # transforms.Lambda(lambda x: resize(x, (x.shape[0],96,80,112), order=1, anti_aliasing=True)),
             transforms.Lambda(lambda x: self.toGrayScale(x)),
             transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float16 if opt.amp else torch.float32)),
             PadIfNecessary(3),
-            transforms.Lambda(lambda x: self.center(x, opt.mean, opt.std)),
+            # transforms.Lambda(lambda x: self.center(x, opt.mean, opt.std)),
             # transforms.Lambda(lambda x: F.pad(x, (0,1,0,0,0,0), mode='constant', value=0)),
         ]
 
@@ -99,13 +99,22 @@ class MRIDataset(BaseDataset):
 
     def __getitem__(self, index):
         A_path = self.A_paths[index % self.A_size]  # make sure index is within then range
+        # A_path = self.A_paths[102]
+        A_img = np.array(nib.load(A_path).get_fdata())
         if self.opt.paired:   # make sure index is within then range
             index_B = index % self.B_size
-        else:   # randomize the index for domain B to avoid fixed pairs.
-            index_B = random.randint(0, self.B_size - 1)
-        B_path = self.B_paths[index_B]
-        A_img = np.array(nib.load(A_path).get_fdata())
-        B_img = np.array(nib.load(B_path).get_fdata())
+            B_path = self.B_paths[index_B]
+            B_img = np.array(nib.load(B_path).get_fdata())
+        else:
+            while True: # Prevent big pairs
+                index_B = random.randint(0, self.B_size - 1)
+                # index_B = 3
+                B_path = self.B_paths[index_B]
+                B_img = np.array(nib.load(B_path).get_fdata())
+                if np.prod(B_img.shape) + np.prod(A_img.shape) < 20000000:
+                    break
+                else:
+                    print('[WARNING]: skipped A: {0} with B:{1}'.format(A_path, B_path))
         A = self.transform(A_img[np.newaxis, ...])
         B = self.transform(B_img[np.newaxis, ...])
         return {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path}

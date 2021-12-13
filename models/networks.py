@@ -370,7 +370,7 @@ def define_G(input_nc, output_nc, ngf, netG, norm='instance', use_dropout=False,
     elif netG == 'obelisk':
         net = ObeliskHybridGenerator(output_nc)
     elif netG == 'obelisk-resnet':
-        net = ObeliskResNet((1,64,1), opt.mean, opt.std)
+        net = DUNe((1,64,1), opt.ngl, norm_layer=norm_layer)
         # net = obeliskhybrid_visceral(1,opt.mean, opt.std)
     elif netG == 'unet_128':
         net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
@@ -1658,37 +1658,158 @@ class ObeliskLayer(nn.Module):
             x = F.interpolate(x, size=half_res, mode='trilinear' if dimensions==3 else 'bilinear', align_corners=False)
         return x
 
-class ObeliskResNet(nn.Module):
-    def __init__(self, C: tuple, mean: float, std: float, ngl: int = 3):
-        super().__init__()
-        self.ngl = ngl
-        self.mean = mean
-        self.std = std
-        C_in, C_mid, C_out = C
-        self.encoder = nn.Sequential(
-            conv(C_in, 4, 3, padding=1),
-            batchNorm(4),
-            nn.ReLU(True),
-            ObeliskLayer((4,128,C_mid), down_scale_factor=1, K=128, denseNetLayers=4),
-        )
-        self.transformer = []
-        for i in range(ngl):
-            self.transformer.append(ResnetBlock(C_mid, padding_type='reflect', norm_layer=batchNorm, use_dropout=False, use_bias=False))
-        self.transformer = nn.Sequential(*self.transformer)
-        self.decoder = nn.Sequential(
-            convTranspose(64, C_out, kernel_size=3, stride=2,padding=1, output_padding=1, bias=True),
-            nn.Tanh()
-        )
+# class ObeliskMiniLayer(nn.Module):
+#     """
+#     Taken from https://github.com/mattiaspaul/OBELISK
+#     Defines the OBELISK layer that performs deformable convolution with the given number of trainable spatial offsets and a 5 layer 1x1 Dense-Net. The tensor after this layer will be interpolated the input tensor shape using trilinear interpolation
+#     """
+#     def __init__(self, C: tuple, K: int = 128, stride=1):
+#         """
+#         Creates an OBELISK layer that performs deformable convolution with the given number of trainable spatial offsets and a 5 layer 1x1 Dense-Net. The tensor after this layer will be interpolated the input tensor shape using trilinear interpolation
 
-    def forward(self, x):
-        x = self.encoder(x)
-        x = self.transformer(x)
-        x = self.decoder(x)
-        x = ((x+1)/2)*255.
-        x = (x-self.mean) / self.std
-        return x
+#         Parameters:
+#         ----------
+#             - C_out (int): Number of Output channels
+#             - full_res: list
+#         """
+#         super().__init__()
+#         self.C_in, self.C_out = C
+#         self.group_size = 4
+#         self.grid_initialized_with = 0
+#         self.sample_grid = None
+#         self.stride = 2**(stride-1)
         
+#         # Obelisk N=1 variant offsets: 1x #offsets x1xNx3
+#         self.offset = nn.Parameter(torch.randn(1,K,*[1]*(dimensions-1),dimensions)*0.05)
 
+#         self.conv1 = nn.ModuleList(
+#             conv(K, self.C_out, kernel_size=1) for _ in range(self.C_in // self.group_size)
+#         )
+
+#     def create_grid(self, quarter_res, device):
+#         grid_base = [2,3] if dimensions==2 else [3,4]
+#         # Obelisk sample_grid: 1 x 1 x #samples x 1 x 3
+#         self.sample_grid = F.affine_grid(torch.eye(*grid_base, device=device).unsqueeze(0), torch.Size((1,1,*quarter_res))).view(1,1,-1,*[1]*(dimensions-2),dimensions).detach()
+#         self.sample_grid.requires_grad = False
+#         self.grid_initialized_with = quarter_res
+
+#     def forward(self, x: torch.Tensor):
+#         S = list(torch.tensor(x.shape[2:]) // self.stride)
+#         if self.grid_initialized_with != S:
+#             self.create_grid(S, x.device)
+#         B = x.size()[0]
+
+#         # Obelisk Layer
+#         y = 0
+#         for i in range(self.C_in):
+#             feature_map = F.grid_sample(x[:,i:i+1], (self.sample_grid.repeat(B,1,*[1]*dimensions) + self.offset), align_corners=True).view(B,-1,*S)
+#             y = y + self.conv1[i//self.group_size](feature_map)
+#         return y
+
+class DSNetBlock(nn.Module):
+    def __init__(self, block: nn.Module, norm: nn.Module, C: int, skip = True):
+        super().__init__()
+        self.block = block
+        self.norm = norm
+        self.weighted_sum = conv(C+1, 1, kernel_size=1)
+        self.C = C
+        self.skip = skip
+
+    def forward(self, x: torch.Tensor, skip_connections = None):
+        if skip_connections is None:
+            skip_connections = [x]
+        y = self.block(x)
+        y = self.weighted_sum(
+            torch.concat([y,*skip_connections], 1).view(x.shape[0], self.C+1,*[1]*(dimensions-1), -1)
+            ).view(x.shape)
+        skip_connections.append(self.norm(y))
+        if self.skip:
+            return y, skip_connections
+        return y
+
+class DUNe(nn.Module):
+    def __init__(self, C: tuple, ngl: int = 3, norm_layer=nn.InstanceNorm2d):
+        super().__init__()
+        C_in, C_mid, C_out = C
+        self.ngl = ngl
+        model = [
+            conv(C_in, 16, kernel_size=3, stride=2, padding=1),
+            norm_layer(16),
+            nn.ReLU(True),
+            conv(16+1, 16, kernel_size=3, padding=1),
+            norm_layer(16),
+            nn.ReLU(True),
+            conv(16, 32, kernel_size=3, stride=2, padding=1),
+            norm_layer(32),
+            nn.ReLU(True),
+        ]
+        num_skip = 1+16
+        for i in range(1,ngl+1):       # add DSNet blocks
+            model += [
+                conv(32*i + num_skip, 32*(i+1), kernel_size=3, padding=1),
+                norm_layer(C_mid),
+                nn.ReLU(True),
+            ]
+            num_skip += 32*i
+
+        model += [
+            conv(32*(ngl+1) + num_skip, 64, kernel_size=3, padding=1),
+            norm_layer(64),
+            nn.ReLU(True),
+            convTranspose(64, 32, kernel_size=3, stride=2, padding=1, output_padding=1),
+            norm_layer(32),
+            nn.ReLU(True),
+            conv(32+1+16+64, 32, kernel_size=3, padding=1),
+            norm_layer(32),
+            nn.ReLU(True),
+            convTranspose(32, 8, kernel_size=3, stride=2, padding=1, output_padding=1),
+            norm_layer(8),
+            nn.ReLU(True),
+            conv(8+1+32, C_out, kernel_size=3, padding=1),
+            nn.Sigmoid()
+        ]
+        self.model = nn.Sequential(*model)
+
+    def forward(self, input, layers=None, encode_only=False):
+        if not layers:
+            layers = []
+        feat = input
+        feats = []
+        d_1 = F.interpolate(input, scale_factor=0.5)
+        d_2 = F.interpolate(input, scale_factor=0.25)
+        d_0_skip = [input]
+        d_1_skip = [d_1]
+        d_2_skip = [d_2]
+        for layer_id, layer in enumerate(self.model):
+            if (layer_id == 3):
+                feat = torch.concat([feat, d_1], dim=1)
+            elif (layer_id==6):
+                d_1_skip.append(feat)
+                d_2_skip.append(F.interpolate(feat, scale_factor=0.5))
+            elif (layer_id >=9 and layer_id <=9+self.ngl*3 and layer_id%3==0):
+                d_2_skip.append(feat)
+                feat = torch.concat([*d_2_skip], dim=1)
+            elif (layer_id==12+self.ngl*3):
+                d_1_skip.append(F.interpolate(feat, scale_factor=2))
+            elif (layer_id==15+self.ngl*3):
+                feat = torch.concat([feat, *d_1_skip], dim=1)
+            elif (layer_id==18+self.ngl*3):
+                d_0_skip.append(F.interpolate(feat, scale_factor=2))
+            elif (layer_id==21+self.ngl*3):
+                feat = torch.concat([feat, *d_0_skip], dim=1)
+            feat = layer(feat)
+            if layer_id in layers:
+                # print("%d: adding the output of %s %d" % (layer_id, layer.__class__.__name__, feat.size(1)))
+                feats.append(feat)
+            else:
+                # print("%d: skipping %s %d" % (layer_id, layer.__class__.__name__, feat.size(1)))
+                pass
+            if encode_only and layer_id == layers[-1]:
+                # print('encoder only return features')
+                return feats  # return intermediate features alone; stop in the last layers
+        if len(layers)==0:
+            return feat
+        return feat, feats
 
 class ObeliskDiscriminator(nn.Module):
     def __init__(self, C_in):
@@ -1714,10 +1835,8 @@ class ObeliskHybridGenerator(nn.Module):
     Taken from https://github.com/mattiaspaul/OBELISK
     Hybrid OBELISK CNN model that contains two obelisk layers combined with traditional CNNs the layers have 512 and 128 trainable offsets and 230k trainable weights in total
     """
-    def __init__(self, C_out: int, mean: float, std: float, cbam=False):
+    def __init__(self, C_out: int, cbam=False):
         super().__init__()
-        self.mean = mean
-        self.std = std
 
         norm = get_norm_layer('instance')
         activation = lambda: nn.ReLU(True)
