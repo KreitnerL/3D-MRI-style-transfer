@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from models.networks import setDimensions
 
 class SpatialRotation():
-    def __init__(self, dimensions: Sequence, k: Sequence = [1], auto_update=True):
+    def __init__(self, dimensions: Sequence, k: Sequence = [3], auto_update=True):
         self.dimensions = dimensions
         self.k = k
         self.args = None

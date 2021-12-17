@@ -186,7 +186,7 @@ class BaseModel(ABC):
                 if tmp.dim() == 5:
                     # For 3D data, take a slice along the z-axis
                     if slice:
-                        tmp = tmp[:,:,:,:,int(tmp.shape[-1]/2)]
+                        tmp = tmp[:,:,:,:,int(tmp.shape[-1]/2)].detach().cpu()
                 visual_ret[name] = tmp
         if self.opt.bayesian:
             std_map: torch.Tensor = self.std_map
@@ -207,7 +207,7 @@ class BaseModel(ABC):
         errors_ret = OrderedDict()
         for name in self.loss_names:
             if isinstance(name, str):
-                errors_ret[name] = float(getattr(self, 'loss_' + name))  # float(...) works for both scalar tensor and float number
+                errors_ret[name] = float(getattr(self, 'loss_' + name).detach().cpu())  # float(...) works for both scalar tensor and float number
         return errors_ret
 
     def save_networks(self, epoch):

@@ -15,6 +15,7 @@ if __name__ == '__main__':
     dataset_size = len(dataset)    # get the number of images in the dataset.
     opt.dataset_size = dataset_size
     opt.print_freq = dataset_size // opt.print_freq
+    opt.display_freq = dataset_size // opt.display_freq
 
     opt.phase='test'
     test_dataset = create_dataset(opt)

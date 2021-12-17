@@ -6,6 +6,7 @@ import functools
 from torch.nn.modules.batchnorm import BatchNorm2d, BatchNorm3d
 from torch.nn.modules.padding import ConstantPad3d
 from torch.nn.modules.pooling import AdaptiveMaxPool2d
+from torch.nn.parameter import Parameter
 from torch.optim import lr_scheduler
 import numpy as np
 from .stylegan_networks import StyleGAN2Discriminator, StyleGAN2Generator
@@ -370,7 +371,9 @@ def define_G(input_nc, output_nc, ngf, netG, norm='instance', use_dropout=False,
     elif netG == 'obelisk':
         net = ObeliskHybridGenerator(output_nc)
     elif netG == 'obelisk-resnet':
-        net = DUNe((1,64,1), opt.ngl, norm_layer=norm_layer)
+        # net = DUNe((1,opt.ngf,1), opt.ngl, norm_layer=norm_layer)
+        # net = TestNet((1, opt.ngf,1), opt.ngl,  norm_layer=norm_layer)
+        net = StairNet((1,opt.ngl,1), norm_layer=norm_layer)
         # net = obeliskhybrid_visceral(1,opt.mean, opt.std)
     elif netG == 'unet_128':
         net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
@@ -1176,7 +1179,7 @@ class ResnetGenerator(nn.Module):
 
         self.model = nn.Sequential(*model)
 
-    def forward(self, input, layers, encode_only=False):
+    def forward(self, input, layers=None, encode_only=False):
         if layers is not None:
             feat = input
             feats = []
@@ -1634,7 +1637,7 @@ class ObeliskLayer(nn.Module):
     def create_grid(self, quarter_res, device):
         grid_base = [2,3] if dimensions==2 else [3,4]
         # Obelisk sample_grid: 1 x 1 x #samples x 1 x 3
-        self.sample_grid = F.affine_grid(torch.eye(*grid_base, device=device).unsqueeze(0), torch.Size((1,1,*quarter_res))).view(1,1,-1,*[1]*(dimensions-2),dimensions).detach()
+        self.sample_grid = F.affine_grid(torch.eye(*grid_base, device=device).unsqueeze(0), torch.Size((1,1,*quarter_res)), align_corners=False).view(1,1,-1,*[1]*(dimensions-2),dimensions).detach()
         self.sample_grid.requires_grad = False
         self.grid_initialized_with = quarter_res
 
@@ -1647,7 +1650,7 @@ class ObeliskLayer(nn.Module):
         B = x.size()[0]
 
         # Obelisk Layer
-        x = F.grid_sample(x, (self.sample_grid.repeat(B,1,*[1]*dimensions) + self.offset), align_corners=True).view(B,-1,*quarter_res)
+        x = F.grid_sample(x, (self.sample_grid.repeat(B,1,*[1]*dimensions) + self.offset), align_corners=False).view(B,-1,*quarter_res)
         x = self.conv1(x)
 
         # Dense-Net with 1x1x1 kernels
@@ -1658,14 +1661,75 @@ class ObeliskLayer(nn.Module):
             x = F.interpolate(x, size=half_res, mode='trilinear' if dimensions==3 else 'bilinear', align_corners=False)
         return x
 
-# class ObeliskMiniLayer(nn.Module):
-#     """
-#     Taken from https://github.com/mattiaspaul/OBELISK
-#     Defines the OBELISK layer that performs deformable convolution with the given number of trainable spatial offsets and a 5 layer 1x1 Dense-Net. The tensor after this layer will be interpolated the input tensor shape using trilinear interpolation
-#     """
-#     def __init__(self, C: tuple, K: int = 128, stride=1):
-#         """
-#         Creates an OBELISK layer that performs deformable convolution with the given number of trainable spatial offsets and a 5 layer 1x1 Dense-Net. The tensor after this layer will be interpolated the input tensor shape using trilinear interpolation
+class StairNet(nn.Module):
+    def __init__(self, C: tuple, factor=5, norm_layer=nn.InstanceNorm2d):
+        super().__init__()
+        C_in, C_mid, C_out = C
+        self.factor = factor
+        self.l0_in = conv(C_in, 64, 3, padding=1)
+        self.l0 = nn.Sequential(
+            norm_layer(64),
+            nn.ReLU(True),
+            DenseShortut(64, norm_layer=norm_layer),
+            norm_layer(64),
+            nn.ReLU(True),
+            convTranspose(64,8, kernel_size=3, stride=2, padding=1, output_padding=1),
+        )
+        self.layers_in = nn.ModuleList([self.l0_in])
+        self.layers = nn.ModuleList([self.l0])
+        c_upper = 64
+        c = 128
+        for i in range(2, factor):
+            self.layers_in.append(conv(1, c, 3, padding=1))
+            self.layers.append(
+                nn.Sequential(
+                    norm_layer(c_upper),
+                    nn.ReLU(True),
+                    DenseShortut(c, norm_layer=norm_layer),
+                    norm_layer(c),
+                    nn.ReLU(True),
+                    convTranspose(c,c_upper, kernel_size=3, stride=2, padding=1, output_padding=1)
+                )
+            )
+            c_upper = c
+            c = c//2
+        self.out = nn.Sequential(
+            norm_layer(8),
+            nn.ReLU(True),
+            conv(8, C_out, 3, padding=1),
+            nn.Sigmoid())
+
+    def forward(self, input, layers=None, encode_only=False):
+        if not layers:
+            layers = []
+        feats = []
+        layer_id = 0
+
+        r_old = None
+        for i in range(self.factor-1, 0, -1):
+            r = F.interpolate(input, scale_factor=1/(2**i), recompute_scale_factor=True)
+            l_in, l_i = self.layers_in[i-1],self.layers[i-1]
+            r = l_in(r)
+            if layer_id in layers:
+                feats.append(r)
+                if encode_only and layer_id == layers[-1]:
+                    return feats
+            layer_id += 1
+            if r_old is not None:
+                r = r + r_old
+            r = l_i(r)
+            if layer_id in layers:
+                feats.append(r)
+                if encode_only and layer_id == layers[-1]:
+                    return feats
+            layer_id += 1
+            r_old = r
+            r = None
+        r_old = self.out(r_old)
+
+        if len(layers)==0:
+            return r_old
+        return r_old, feats
 
 #         Parameters:
 #         ----------
@@ -1726,6 +1790,24 @@ class DSNetBlock(nn.Module):
         if self.skip:
             return y, skip_connections
         return y
+
+class DenseShortut(nn.Module):
+    def __init__(self, C: int, block1=None, block2=None, norm_layer=nn.InstanceNorm2d) -> None:
+        super().__init__()
+        self.norm1 =  nn.Sequential(norm_layer(C),nn.ReLU(True))
+        self.norm2 =  nn.Sequential(norm_layer(C),nn.ReLU(True))
+        self.block1 = block1 or conv(C, C, kernel_size=3, padding=1)
+        self.weightedSum1 = Parameter(torch.normal(mean=0, std=1, size=(1,C,*[1]*dimensions)))
+        self.block2 = block2 or conv(C, C, kernel_size=3, padding=1)
+        self.weightedSum2_1 = Parameter(torch.normal(mean=0, std=1, size=(1,C,*[1]*dimensions)))
+        self.weightedSum2_2 = Parameter(torch.normal(mean=0, std=1, size=(1,C,*[1]*dimensions)))
+    
+    def forward(self, x):
+        x0 = self.norm1(x)
+        x1 = self.block1(x0) + x0 * self.weightedSum1
+        x1 = self.norm2(x1)
+        x = self.block2(x1) + x0 * self.weightedSum2_1 + x1 * self.weightedSum2_2
+        return x
 
 class DUNe(nn.Module):
     def __init__(self, C: tuple, ngl: int = 3, norm_layer=nn.InstanceNorm2d):

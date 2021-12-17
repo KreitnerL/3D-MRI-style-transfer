@@ -198,11 +198,13 @@ class CUTModel(BaseModel):
 
         if self.opt.lambda_NCE > 0.0:
             self.loss_NCE = self.calculate_NCE_loss(self.real_A_feats, self.fake_B)
+            self.real_A_feats = None
         else:
             self.loss_NCE, self.loss_NCE_bd = 0.0, 0.0
 
         if self.opt.nce_idt and self.opt.lambda_NCE > 0.0:
             self.loss_NCE_Y = self.calculate_NCE_loss(self.real_B_feats, self.idt_B)
+            self.real_B_feats = None
             loss_NCE_both = (self.loss_NCE + self.loss_NCE_Y) * 0.5
         else:
             loss_NCE_both = self.loss_NCE
