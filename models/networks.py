@@ -373,7 +373,7 @@ def define_G(input_nc, output_nc, ngf, netG, norm='instance', use_dropout=False,
     elif netG == 'obelisk-resnet':
         # net = DUNe((1,opt.ngf,1), opt.ngl, norm_layer=norm_layer)
         # net = TestNet((1, opt.ngf,1), opt.ngl,  norm_layer=norm_layer)
-        net = StairNet((1,opt.ngl,1), norm_layer=norm_layer)
+        net = StairNet((1,opt.ngf,1), norm_layer=norm_layer)
         # net = obeliskhybrid_visceral(1,opt.mean, opt.std)
     elif netG == 'unet_128':
         net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
@@ -1662,37 +1662,51 @@ class ObeliskLayer(nn.Module):
         return x
 
 class StairNet(nn.Module):
-    def __init__(self, C: tuple, factor=5, norm_layer=nn.InstanceNorm2d):
+    def __init__(self, C: tuple, factor=4, norm_layer=nn.InstanceNorm2d):
         super().__init__()
         C_in, C_mid, C_out = C
         self.factor = factor
-        self.l0_in = conv(C_in, 64, 3, padding=1)
-        self.l0 = nn.Sequential(
-            norm_layer(64),
-            nn.ReLU(True),
-            DenseShortut(64, norm_layer=norm_layer),
-            norm_layer(64),
-            nn.ReLU(True),
-            convTranspose(64,8, kernel_size=3, stride=2, padding=1, output_padding=1),
-        )
-        self.layers_in = nn.ModuleList([self.l0_in])
-        self.layers = nn.ModuleList([self.l0])
-        c_upper = 64
-        c = 128
-        for i in range(2, factor):
-            self.layers_in.append(conv(1, c, 3, padding=1))
-            self.layers.append(
-                nn.Sequential(
-                    norm_layer(c_upper),
-                    nn.ReLU(True),
-                    DenseShortut(c, norm_layer=norm_layer),
-                    norm_layer(c),
-                    nn.ReLU(True),
-                    convTranspose(c,c_upper, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.layers = nn.ModuleList([])
+        self.layers_in = nn.Sequential()
+        self.weightedSum = nn.ModuleList([])
+        for i in range(1, factor):
+            self.layers_in.add_module(str(i-1), nn.Sequential(
+                conv(C_in if i==1 else C_mid , C_mid, kernel_size=3, stride=2, padding=1),
+                norm_layer(C_mid),
+                nn.ReLU(True)
+            ))
+            if i < factor-1:
+                combine_module = [conv(2*C_mid,C_mid, kernel_size=1)]
+            else:
+                combine_module = []
+            if i==1:
+                self.layers.append(
+                    nn.Sequential(
+                        *combine_module,
+                        DenseShortut(C_mid, norm_layer=norm_layer),
+                        norm_layer(C_mid),
+                        nn.ReLU(True),
+                        DenseShortut(C_mid, norm_layer=norm_layer),
+                        norm_layer(C_mid),
+                        nn.ReLU(True),
+                        convTranspose(C_mid, 8, kernel_size=3, stride=2, padding=1, output_padding=1),
+                        norm_layer(8),
+                        nn.ReLU(True),
+                    )
                 )
-            )
-            c_upper = c
-            c = c//2
+            else:
+                self.layers.append(
+                    nn.Sequential(
+                        *combine_module,
+                        DenseShortut(C_mid, norm_layer=norm_layer),
+                        norm_layer(C_mid),
+                        nn.ReLU(True),
+                        convTranspose(C_mid, C_mid, kernel_size=3, stride=2, padding=1, output_padding=1),
+                        norm_layer(C_mid),
+                        nn.ReLU(True),
+                    )
+                )
+    
         self.out = nn.Sequential(
             norm_layer(8),
             nn.ReLU(True),
@@ -1705,31 +1719,37 @@ class StairNet(nn.Module):
         feats = []
         layer_id = 0
 
-        r_old = None
+        # Downsample
+        r_in = []
+        for l_i_in in self.layers_in:
+            input = l_i_in(input)
+            r_in.append(input)
+
+        # Upsample
+        r_out = None
         for i in range(self.factor-1, 0, -1):
-            r = F.interpolate(input, scale_factor=1/(2**i), recompute_scale_factor=True)
-            l_in, l_i = self.layers_in[i-1],self.layers[i-1]
-            r = l_in(r)
+            l_i = self.layers[i-1]
+            r = r_in.pop()
             if layer_id in layers:
                 feats.append(r)
                 if encode_only and layer_id == layers[-1]:
                     return feats
-            layer_id += 1
-            if r_old is not None:
-                r = r + r_old
+            if r_out is not None:
+                r = torch.concat([r, r_out], dim=1)
+            layer_id+=1
             r = l_i(r)
             if layer_id in layers:
                 feats.append(r)
                 if encode_only and layer_id == layers[-1]:
                     return feats
             layer_id += 1
-            r_old = r
+            r_out = r
             r = None
-        r_old = self.out(r_old)
+        r_out = self.out(r_out)
 
         if len(layers)==0:
-            return r_old
-        return r_old, feats
+            return r_out
+        return r_out, feats
 
 #         Parameters:
 #         ----------
@@ -1794,19 +1814,26 @@ class DSNetBlock(nn.Module):
 class DenseShortut(nn.Module):
     def __init__(self, C: int, block1=None, block2=None, norm_layer=nn.InstanceNorm2d) -> None:
         super().__init__()
-        self.norm1 =  nn.Sequential(norm_layer(C),nn.ReLU(True))
-        self.norm2 =  nn.Sequential(norm_layer(C),nn.ReLU(True))
         self.block1 = block1 or conv(C, C, kernel_size=3, padding=1)
+        self.norm1 =  nn.Sequential(norm_layer(C),nn.ReLU(True))
         self.weightedSum1 = Parameter(torch.normal(mean=0, std=1, size=(1,C,*[1]*dimensions)))
         self.block2 = block2 or conv(C, C, kernel_size=3, padding=1)
+        self.norm2 =  nn.Sequential(norm_layer(C),nn.ReLU(True))
         self.weightedSum2_1 = Parameter(torch.normal(mean=0, std=1, size=(1,C,*[1]*dimensions)))
         self.weightedSum2_2 = Parameter(torch.normal(mean=0, std=1, size=(1,C,*[1]*dimensions)))
+        self.block3 = conv(C, C, kernel_size=3, padding=1)
+        self.norm3 =  nn.Sequential(norm_layer(C),nn.ReLU(True))
+        self.weightedSum3_1 = Parameter(torch.normal(mean=0, std=1, size=(1,C,*[1]*dimensions)))
+        self.weightedSum3_2 = Parameter(torch.normal(mean=0, std=1, size=(1,C,*[1]*dimensions)))
+        self.weightedSum3_3 = Parameter(torch.normal(mean=0, std=1, size=(1,C,*[1]*dimensions)))
     
     def forward(self, x):
         x0 = self.norm1(x)
         x1 = self.block1(x0) + x0 * self.weightedSum1
         x1 = self.norm2(x1)
-        x = self.block2(x1) + x0 * self.weightedSum2_1 + x1 * self.weightedSum2_2
+        x2 = self.block2(x1) + x0 * self.weightedSum2_1 + x1 * self.weightedSum2_2
+        x2 = self.norm3(x2)
+        x = self.block3(x2) + x0 * self.weightedSum3_1 + x1 * self.weightedSum3_2 + x2 * self.weightedSum3_3
         return x
 
 class DUNe(nn.Module):

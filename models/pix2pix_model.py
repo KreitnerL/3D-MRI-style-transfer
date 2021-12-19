@@ -64,7 +64,7 @@ class Pix2PixModel(BaseModel):
             self.networks.extend([self.netD])
         if self.isTrain:
             # define loss functions
-            self.criterionGAN = networks.GANLoss(opt.gan_mode).to(self.device)
+            self.criterionGAN = networks.GANLoss(opt.gan_mode, dtype=torch.float16 if opt.amp else torch.float32).to(self.device)
             ssim = SSIM()
             l1 = torch.nn.L1Loss()
 
@@ -105,7 +105,7 @@ class Pix2PixModel(BaseModel):
             self.loss_D_real = self.criterionGAN(pred_real, True)
             # combine loss and calculate gradients
             self.loss_D = (self.loss_D_fake + self.loss_D_real) * 0.5
-        self.scaler.scale(self.loss_G).backward()
+        self.scaler.scale(self.loss_D).backward()
 
     def backward_G(self):
         """Calculate GAN and L1 loss for the generator"""
