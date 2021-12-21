@@ -70,7 +70,7 @@ class MRIDataset(BaseDataset):
             # transforms.Lambda(lambda x: resize(x, (x.shape[0],96,80,112), order=1, anti_aliasing=True)),
             transforms.Lambda(lambda x: self.toGrayScale(x)),
             transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float16 if opt.amp else torch.float32)),
-            PadIfNecessary(4),
+            PadIfNecessary(3),
             # transforms.Lambda(lambda x: self.center(x, opt.mean, opt.std)),
             # transforms.Lambda(lambda x: F.pad(x, (0,1,0,0,0,0), mode='constant', value=0)),
         ]
