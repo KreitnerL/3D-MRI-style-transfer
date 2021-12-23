@@ -3,7 +3,6 @@ from data.base_dataset import BaseDataset
 import nibabel as nib
 import random
 from torchvision import transforms
-from skimage.transform import resize
 import os
 import numpy as np
 import torch
@@ -61,18 +60,17 @@ class MRIDataset(BaseDataset):
         super().__init__(opt)
         self.A_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 'mri', opt.phase), '.nii.gz'))
         self.B_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 'ct', opt.phase), '.nii.gz'))
+        self.surpress_registration_artifacts = True
         self.A_size = len(self.A_paths)  # get the size of dataset A
         self.B_size = len(self.B_paths)  # get the size of dataset B
         setDimensions(3, opt.bayesian)
+        opt.no_antialias = True
+        opt.no_antialias_up = True
 
         self.transformations = [
-            # transforms.Lambda(lambda x: x[:,48:240,80:240,36:260]), # 192x160x224
-            # transforms.Lambda(lambda x: resize(x, (x.shape[0],96,80,112), order=1, anti_aliasing=True)),
             transforms.Lambda(lambda x: self.toGrayScale(x)),
             transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float16 if opt.amp else torch.float32)),
-            PadIfNecessary(4),
-            # transforms.Lambda(lambda x: self.center(x, opt.mean, opt.std)),
-            # transforms.Lambda(lambda x: F.pad(x, (0,1,0,0,0,0), mode='constant', value=0)),
+            PadIfNecessary(3),
         ]
 
         if(opt.phase == 'train'):
@@ -115,6 +113,11 @@ class MRIDataset(BaseDataset):
                     break
                 else:
                     print('[WARNING]: skipped A: {0} with B:{1}'.format(A_path, B_path))
+        if self.opt.paired and self.surpress_registration_artifacts is True:
+            A_min = np.min(A_img)
+            B_min = np.min(B_img)
+            A_img[B_img==0] = A_min
+            B_img[B_img==0] = B_min
         A = self.transform(A_img[np.newaxis, ...])
         B = self.transform(B_img[np.newaxis, ...])
         return {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path}

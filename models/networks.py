@@ -371,10 +371,7 @@ def define_G(input_nc, output_nc, ngf, netG, norm='instance', use_dropout=False,
     elif netG == 'obelisk':
         net = ObeliskHybridGenerator(output_nc)
     elif netG == 'obelisk-resnet':
-        # net = DUNe((1,opt.ngf,1), opt.ngl, norm_layer=norm_layer)
-        # net = TestNet((1, opt.ngf,1), opt.ngl,  norm_layer=norm_layer)
-        net = StairNet((1,opt.ngf,1), norm_layer=norm_layer)
-        # net = obeliskhybrid_visceral(1,opt.mean, opt.std)
+        net = StairNet((input_nc,opt.ngf,output_nc), norm_layer=norm_layer)
     elif netG == 'unet_128':
         net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
     elif netG == 'unet_256':
