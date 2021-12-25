@@ -160,12 +160,6 @@ class CUTModel(BaseModel):
         real_A_in = self.real_A
         if self.opt.nce_idt and self.opt.isTrain:
             real_B_in = self.real_B
-        if self.opt.flip_equivariance:
-            self.flipped_for_equivariance = self.opt.isTrain and (np.random.random() < 0.5)
-            if self.flipped_for_equivariance:
-                real_A_in = torch.flip(self.real_A, [3])
-                if self.opt.nce_idt and self.opt.isTrain:
-                    real_B_in = torch.flip(self.real_B, [3])
         if self.opt.lambda_NCE and self.opt.phase == 'train':
             self.fake_B, self.real_A_feats = self.netG(real_A_in, self.nce_layers)
         else:
@@ -215,9 +209,6 @@ class CUTModel(BaseModel):
     def calculate_NCE_loss(self, feat_k, tgt):
         n_layers = len(self.nce_layers)
         feat_q = self.netG(tgt, self.nce_layers, encode_only=True)
-
-        if self.opt.flip_equivariance and self.flipped_for_equivariance:
-            feat_q = [torch.flip(fq, [3]) for fq in feat_q]
 
         # feat_k = self.netG(src, self.nce_layers, encode_only=True)
         feat_k_pool, sample_ids = self.netF(feat_k, self.opt.num_patches, None)
