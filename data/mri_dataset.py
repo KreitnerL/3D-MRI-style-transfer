@@ -1,59 +1,13 @@
 from data.image_folder import get_custom_file_paths, natural_sort
 from data.base_dataset import BaseDataset
+from data.data_augmentation_3D import PadIfNecessary, SpatialFlip, SpatialRotation, ColorJitter3D
 import nibabel as nib
 import random
 from torchvision import transforms
 import os
 import numpy as np
 import torch
-import torch.nn.functional as F
-from collections.abc import Sequence
 from models.networks import setDimensions
-
-class SpatialRotation():
-    def __init__(self, dimensions: Sequence, k: Sequence = [3], auto_update=True):
-        self.dimensions = dimensions
-        self.k = k
-        self.args = None
-        self.auto_update = auto_update
-        self.update()
-
-    def update(self):
-        self.args = (random.choice(self.k), random.choice(self.dimensions))
-
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        if self.auto_update:
-            self.update()
-        x = torch.rot90(x, *self.args)
-        return x
-
-class SpatialFlip():
-    def __init__(self, dims: Sequence, auto_update=True) -> None:
-        self.dims = dims
-        self.args = None
-        self.auto_update = auto_update
-        self.update()
-
-    def update(self):
-        self.args = tuple(random.sample(self.dims, random.choice(range(len(self.dims)))))
-
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        if self.auto_update:
-            self.update()
-        x = torch.flip(x, self.args)
-        return x
-
-class PadIfNecessary():
-    def __init__(self, n_downsampling: int):
-        self.n_downsampling = n_downsampling
-        self.mod = 2**self.n_downsampling
-
-    def __call__(self, x):
-        padding = []
-        for dim in reversed(x.shape[1:]):
-            padding.extend([0, (self.mod - dim%self.mod)%self.mod])
-        x = F.pad(x, padding)
-        return x
 
 class MRIDataset(BaseDataset):
     def __init__(self, opt):
@@ -81,6 +35,7 @@ class MRIDataset(BaseDataset):
         else:
             self.transformations += [SpatialRotation([(1,2)])]
         self.transform = transforms.Compose(self.transformations)
+        self.colorJitter=ColorJitter3D(brightness_min_max=(0.3, 1.5), contrast_min_max=(0.3, 1.5))
 
     def toGrayScale(self, x):
         x_min = np.amin(x)
@@ -118,7 +73,10 @@ class MRIDataset(BaseDataset):
             B_min = np.min(B_img)
             A_img[B_img==0] = A_min
             B_img[B_img==0] = B_min
+        
         A = self.transform(A_img[np.newaxis, ...])
+        if(self.opt.phase == 'train'):
+            A = self.colorJitter(A)
         B = self.transform(B_img[np.newaxis, ...])
         return {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path}
 

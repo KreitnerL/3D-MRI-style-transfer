@@ -6,7 +6,7 @@ import os
 import numpy as np
 import torch
 from models.networks import setDimensions
-from data.mri_dataset import MRIDataset, PadIfNecessary, SpatialRotation, SpatialFlip
+from data.data_augmentation_3D import MRIDataset, PadIfNecessary, SpatialRotation, SpatialFlip
 
 class brain3DDataset(MRIDataset):
     def __init__(self, opt):
