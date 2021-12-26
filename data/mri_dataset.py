@@ -68,17 +68,19 @@ class MRIDataset(BaseDataset):
                     break
                 else:
                     print('[WARNING]: skipped A: {0} with B:{1}'.format(A_path, B_path))
-        if self.opt.paired and self.surpress_registration_artifacts is True:
-            A_min = np.min(A_img)
-            B_min = np.min(B_img)
-            A_img[B_img==0] = A_min
-            B_img[B_img==0] = B_min
+        if self.surpress_registration_artifacts:
+            if self.opt.paired:
+                registration_artifacts_idx = B_img==0
+            else:
+                registration_artifacts_idx = np.array(nib.load(self.B_paths[index % self.B_size]).get_fdata()) == 0
+            registration_artifacts_idx = self.transform(1- registration_artifacts_idx[np.newaxis, ...]*1.)
+            B_img[B_img==0] = np.min(B_img)
         
         A = self.transform(A_img[np.newaxis, ...])
         if(self.opt.phase == 'train'):
             A = self.colorJitter(A)
         B = self.transform(B_img[np.newaxis, ...])
-        return {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path}
+        return {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path, 'registration_artifacts_idx': registration_artifacts_idx}
 
     def __len__(self):
         """Return the total number of images in the dataset.

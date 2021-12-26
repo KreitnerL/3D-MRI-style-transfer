@@ -6,7 +6,8 @@ import os
 import numpy as np
 import torch
 from models.networks import setDimensions
-from data.data_augmentation_3D import MRIDataset, PadIfNecessary, SpatialRotation, SpatialFlip
+from data.mri_dataset import MRIDataset
+from data.data_augmentation_3D import PadIfNecessary, SpatialRotation, SpatialFlip
 
 class brain3DDataset(MRIDataset):
     def __init__(self, opt):
@@ -17,6 +18,8 @@ class brain3DDataset(MRIDataset):
         self.A_size = len(self.A1_paths)  # get the size of dataset A
         self.B_size = len(self.B_paths)  # get the size of dataset B
         setDimensions(3, opt.bayesian)
+        opt.input_nc = 2
+        opt.output_nc = 1
 
         self.transformations = [
             transforms.Lambda(lambda x: x[:,28:164,26:198,12:156]), # 192x160x224

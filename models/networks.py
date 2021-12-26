@@ -308,7 +308,7 @@ def init_weights(net, init_type='normal', init_gain=0.02, debug=False, nonlinear
                 raise NotImplementedError('initialization method [%s] is not implemented' % init_type)
             if hasattr(m, 'bias') and m.bias is not None:
                 init.constant_(m.bias.data, 0.0)
-        elif classname.find('BatchNorm2d') != -1:  # BatchNorm Layer's weight is not a matrix; only normal distribution applies.
+        elif classname.find('BatchNorm') != -1: # BatchNorm Layer's weight is not a matrix; only normal distribution applies.
             init.normal_(m.weight.data, 1.0, init_gain)
             init.constant_(m.bias.data, 0.0)
 
@@ -1495,9 +1495,9 @@ class NLayerDiscriminator(nn.Module):
         kw = 4
         padw = 1
         if(no_antialias):
-            sequence = [conv(input_nc, ndf, kernel_size=kw, stride=2, padding=padw), nn.LeakyReLU(0.2, True)]
+            sequence = [conv(input_nc, ndf, kernel_size=kw, stride=2, padding=padw), norm_layer(ndf), nn.LeakyReLU(0.2, True)]
         else:
-            sequence = [conv(input_nc, ndf, kernel_size=kw, stride=1, padding=padw), nn.LeakyReLU(0.2, True), Downsample(ndf)]
+            sequence = [conv(input_nc, ndf, kernel_size=kw, stride=1, padding=padw), norm_layer(ndf), nn.LeakyReLU(0.2, True), Downsample(ndf)]
         nf_mult = 1
         nf_mult_prev = 1
         for n in range(1, n_layers):  # gradually increase the number of filters

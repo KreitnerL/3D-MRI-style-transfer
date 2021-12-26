@@ -144,17 +144,6 @@ class CUTModel(BaseModel):
             # Updates the scale for next iteration
         self.scaler.update()
 
-    def set_input(self, input):
-        """Unpack input data from the dataloader and perform necessary pre-processing steps.
-        Parameters:
-            input (dict): include the data itself and its metadata information.
-        The option 'direction' can be used to swap domain A and domain B.
-        """
-        AtoB = self.opt.direction == 'AtoB'
-        self.real_A = input['A' if AtoB else 'B'].to(self.device)
-        self.real_B = input['B' if AtoB else 'A'].to(self.device)
-        self.image_paths = input['A_paths' if AtoB else 'B_paths']
-
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         real_A_in = self.real_A
@@ -164,6 +153,8 @@ class CUTModel(BaseModel):
             self.fake_B, self.real_A_feats = self.netG(real_A_in, self.nce_layers)
         else:
             self.fake_B = self.netG(real_A_in)
+        if self.registration_artifacts_idx is not None:
+            self.fake_B = self.fake_B * self.registration_artifacts_idx.to(self.fake_B.device)
         if self.opt.lambda_NCE and self.opt.nce_idt and self.opt.isTrain:
             self.idt_B, self.real_B_feats = self.netG(real_B_in, self.nce_layers)
 

@@ -292,7 +292,7 @@ class Visualizer():
         plot_name = 'validation_loss'
 
         if plot_name not in self.plot_data:
-            self.plot_data[plot_name] = {'X': [], 'Y': [], 'legend': ['validation loss']}
+            self.plot_data[plot_name] = {'X': [], 'Y': [], 'legend': ['L1 loss']}
 
         plot_data = self.plot_data[plot_name]
         plot_id = list(self.plot_data.keys()).index('validation_loss')
@@ -304,7 +304,7 @@ class Visualizer():
         plt.legend(plot_data['legend'])
         plt.title(self.opt.name)
         plt.xlabel('epoch')
-        plt.ylabel('L1 loss')
+        plt.ylabel('validation loss')
         plt.savefig(self.val_plot_name, format='png', bbox_inches='tight')
         plt.cla()
         try:

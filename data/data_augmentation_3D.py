@@ -39,8 +39,7 @@ class SpatialFlip():
 
 class PadIfNecessary():
     def __init__(self, n_downsampling: int):
-        self.n_downsampling = n_downsampling
-        self.mod = 2**self.n_downsampling
+        self.mod = 2**n_downsampling
 
     def __call__(self, x: torch.Tensor):
         padding = []
@@ -49,10 +48,18 @@ class PadIfNecessary():
         x = F.pad(x, padding)
         return x
 
+    def pad(x, n_downsampling: int = 1):
+        mod = 2**n_downsampling
+        padding = []
+        for dim in reversed(x.shape[1:]):
+            padding.extend([0, (mod - dim%mod)%mod])
+        x = F.pad(x, padding)
+        return x
+
 class ColorJitter3D():
     """
     Randomly change the brightness and contrast an image.
-    A grayscale tensor with values between 0-255 and shape BxCxHxWxD is expected.
+    A grayscale tensor with values between 0-1 and shape BxCxHxWxD is expected.
     Args:
         brightness (float (min, max)): How much to jitter brightness.
             brightness_factor is chosen uniformly from [max(0, 1 - brightness), 1 + brightness]
@@ -71,12 +78,27 @@ class ColorJitter3D():
             self.brightness = float(torch.empty(1).uniform_(self.brightness_min_max[0], self.brightness_min_max[1]))
         if self.contrast_min_max:
             self.contrast = float(torch.empty(1).uniform_(self.contrast_min_max[0], self.contrast_min_max[1]))
+        self.ranges = []
+        for _ in range(3):
+            start = torch.rand(1).item() * 10 - 5
+            end = torch.rand(1).item() * ( 5 - start) + start
+            self.ranges.append((start, end))
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
         self.update()
+
+        jitterSphere = torch.zeros(1)
+        for i,r in enumerate(self.ranges):
+            jitterSphere_i = torch.linspace(*r, steps=x.shape[i + 1])
+            jitterSphere_i = 1.08 * 2.71**(-0.5 * jitterSphere_i ** 2) # Random section of a normal distribution between (-5,5)
+            jitterSphere = jitterSphere.unsqueeze(-1) + jitterSphere_i.view(1, *[1]*i, -1)
+        jitterSphere /= torch.max(jitterSphere) # Random 3D section of a normal distribution sphere
+        
         if self.brightness_min_max:
-            x = (self.brightness * x).float().clamp(0, 1.).to(x.dtype)
+            brightness = (self.brightness - 1) * jitterSphere + 1
+            x = (brightness * x).float().clamp(0, 1.).to(x.dtype)
         if self.contrast_min_max:
+            contrast = (self.contrast - 1) * jitterSphere + 1
             mean = torch.mean(x.float(), dim=(-4, -3, -2, -1), keepdim=True)
-            x = (self.contrast * x + (1.0 - self.contrast) * mean).float().clamp(0, 1.).to(x.dtype)
+            x = (contrast * x + (1.0 - self.contrast) * mean).float().clamp(0, 1.).to(x.dtype)
         return x

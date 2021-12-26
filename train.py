@@ -78,9 +78,9 @@ if __name__ == '__main__':
                 model.test()
                 opt.phase='train'
                 opt.serial_batches, opt.paired = tmp
-                save_result = total_iters % opt.update_html_freq == 0
+                save_result = ((total_iters - opt.display_freq) / epoch) % opt.update_html_freq == 0
                 visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
-                del test_data
+                test_data = None
 
             if total_iters % opt.print_freq == 0:    # print training losses and save logging information to the disk
                 losses = model.get_current_losses()
