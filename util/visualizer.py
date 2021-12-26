@@ -292,7 +292,7 @@ class Visualizer():
         plot_name = 'validation_loss'
 
         if plot_name not in self.plot_data:
-            self.plot_data[plot_name] = {'X': [], 'Y': [], 'legend': ['L1 loss']}
+            self.plot_data[plot_name] = {'X': [], 'Y': [], 'legend': ['L1 loss', '1 - SSIM']}
 
         plot_data = self.plot_data[plot_name]
         plot_id = list(self.plot_data.keys()).index('validation_loss')
@@ -332,6 +332,6 @@ class Visualizer():
         return message2
 
     def print_validation_loss(self, epoch, loss):
-        message = 'Validation loss epoch %d: %.3f'%(epoch, loss)
+        message = 'Validation loss epoch %d: %.3f, %.3f'%(epoch, *loss)
         with open(self.val_loss_log_name, "a") as log_file:
             log_file.write('%s\n' % message)  # save the message

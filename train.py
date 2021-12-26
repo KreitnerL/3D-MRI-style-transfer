@@ -4,6 +4,7 @@ from tqdm import tqdm
 from options.train_options import TrainOptions
 from data import create_dataset
 from models import create_model
+from util.ssim import SSIM
 from util.visualizer import Visualizer
 import numpy as np
 
@@ -29,6 +30,7 @@ if __name__ == '__main__':
     opt.visualizer = visualizer
     total_iters = 0                # the total number of training iterations
     validation_loss_fun = torch.nn.L1Loss()
+    validation_loss_fun2 = SSIM()
 
     optimize_time = 0.1
 
@@ -98,6 +100,7 @@ if __name__ == '__main__':
             torch.cuda.empty_cache()
 
         validation_loss_array = []
+        validation_loss_array2 = []
         opt.phase='test'
         tmp = opt.serial_batches, opt.paired
         opt.serial_batches=True
@@ -111,8 +114,9 @@ if __name__ == '__main__':
             model.set_input(test_data)
             model.test()
             validation_loss_array.append(validation_loss_fun(model.fake_B, model.real_B).item())
+            validation_loss_array2.append(1 - validation_loss_fun2(model.fake_B, model.real_B).item())
         
-        val_loss = np.mean(validation_loss_array)
+        val_loss = [np.mean(validation_loss_array), np.mean(validation_loss_array2)]
         visualizer.print_validation_loss(epoch, val_loss)
         visualizer.plot_current_validation_losses(epoch, val_loss)
         opt.phase='train'
