@@ -1,7 +1,6 @@
 import torch
 from .base_model import BaseModel
 from . import networks
-from util.ssim import SSIM
 
 
 class Pix2PixModel(BaseModel):
@@ -34,7 +33,7 @@ class Pix2PixModel(BaseModel):
         if is_train:
             parser.set_defaults(pool_size=0, gan_mode='lsgan', paired=True)
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
-            parser.add_argument('--lambda_ssim', type=float, default=1, help='Coefficient that scales the SSIM loss')
+            parser.add_argument('--perceptual', default=True, help="If true use perceptual loss")
 
         return parser
 
@@ -46,7 +45,7 @@ class Pix2PixModel(BaseModel):
         """
         BaseModel.__init__(self, opt)
         # specify the training losses you want to print out. The training/test scripts will call <BaseModel.get_current_losses>
-        self.loss_names = ['G_GAN', 'G_L1', 'D_real', 'D_fake']
+        self.loss_names = ['G_GAN', 'G_L1', 'D_real', 'D_fake', 'G_perceptual']
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
         self.visual_names = ['real_A', 'fake_B', 'real_B']
         # specify the models you want to save to the disk. The training/test scripts will call <BaseModel.save_networks> and <BaseModel.load_networks>
@@ -65,10 +64,10 @@ class Pix2PixModel(BaseModel):
         if self.isTrain:
             # define loss functions
             self.criterionGAN = networks.GANLoss(opt.gan_mode, dtype=torch.float16 if opt.amp else torch.float32).to(self.device)
-            ssim = SSIM()
             l1 = torch.nn.L1Loss()
+            self.perceptual_loss = torch.nn.L1Loss()
 
-            self.criterionL1 = lambda i1,i2: l1(i1,i2) - (opt.lambda_ssim * ssim(i1,i2))
+            self.criterionL1 = lambda i1,i2: l1(i1,i2)
             # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
             self.optimizer_G = torch.optim.Adam(self.netG.parameters(), lr=opt.glr, betas=(opt.beta1, opt.beta2))
             self.optimizer_D = torch.optim.Adam(self.netD.parameters(), lr=opt.dlr, betas=(opt.beta1, opt.beta2))
@@ -101,12 +100,17 @@ class Pix2PixModel(BaseModel):
         # First, G(A) should fake the discriminator
         with torch.cuda.amp.autocast(enabled=self.opt.amp):
             fake_AB = torch.cat((self.real_A, self.fake_B), 1)
-            pred_fake = self.netD(fake_AB)
+            pred_fake, feats_fake = self.netD(fake_AB, layers=[0, 3, 6, 9])
             self.loss_G_GAN = self.criterionGAN(pred_fake, True)
             # Second, G(A) = B
             self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
+            self.loss_G_perceptual = torch.tensor(0, device=self.opt.gpu_ids[0], dtype=torch.float16)
+            if self.opt.perceptual:
+                feats_real = self.netD(torch.cat((self.real_A, self.real_B), 1).detach(), layers=[0, 3, 6, 9], encode_only=True)
+                for i, λ_i in enumerate([2.5, 0.75, 0.75, 0.5]):
+                    self.loss_G_perceptual += λ_i * self.perceptual_loss(feats_fake[i], feats_real[i])
             # combine loss and calculate gradients
-            self.loss_G = self.loss_G_GAN + self.loss_G_L1
+            self.loss_G = self.loss_G_GAN + self.loss_G_L1 + self.loss_G_perceptual
         self.scaler.scale(self.loss_G).backward()
 
     def optimize_parameters(self):

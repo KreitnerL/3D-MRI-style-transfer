@@ -22,6 +22,16 @@ def colorFader(mix: float, c1='g',c2='r'): #fade (linear interpolate) from color
     c2=np.array(mpl.colors.to_rgb(c2))
     return (1-mix)*c1 + mix*c2
 
+def colorFaderTensor(mix: torch.Tensor, c1='g',c2='r'): #fade (linear interpolate) from color c1 (at mix=0) to c2 (mix=1)
+    """
+    Given a float number in the range [0,1], returns a interpolated gradient rgb color of the color c1 and c2
+    https://stackoverflow.com/a/50784012
+    """
+    c1=torch.tensor(mpl.colors.to_rgb(c1))
+    c2=torch.tensor(mpl.colors.to_rgb(c2))
+    mix = torch.stack([(1-mix)*c1[i] + mix*c2[i] for i in range(3)], dim=-1)
+    return mix
+
 def str2bool(v):
     if isinstance(v, bool):
         return v
@@ -117,7 +127,12 @@ def save_nifti_image(image_tensor: torch.Tensor, image_path):
     """
     Save a MRI numpy image to the disk. Resize the image by a scaling factor and enforce an aspect ratio of 1
     """
-    new_img = nib.Nifti1Image(image_tensor.long().detach().cpu().numpy()[0,0,:,:,:], np.eye(4))
+    image_tensor = image_tensor.detach().cpu().numpy()[0,0].astype(np.uint8)
+    if len(image_tensor.shape)==4:
+        shape_3d = image_tensor.shape[0:3]
+        rgb_dtype = np.dtype([('R', 'u1'), ('G', 'u1'), ('B', 'u1')])
+        image_tensor = image_tensor.copy().view(dtype=rgb_dtype).reshape(shape_3d)  # copy used
+    new_img = nib.Nifti1Image(image_tensor, np.eye(4))
     nib.save(new_img, image_path)
 
 
