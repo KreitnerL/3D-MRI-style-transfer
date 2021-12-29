@@ -370,8 +370,8 @@ def define_G(input_nc, output_nc, ngf, netG, norm='instance', use_dropout=False,
         net = ResnetGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, no_antialias=no_antialias, no_antialias_up=no_antialias_up, n_blocks=opt.ngl, opt=opt)
     elif netG == 'obelisk':
         net = ObeliskHybridGenerator(output_nc)
-    elif netG == 'obelisk-resnet':
-        net = StairNet((input_nc,opt.ngf,output_nc), norm_layer=norm_layer)
+    elif netG == 'sit':
+        net = SIT((input_nc,opt.ngf,output_nc), norm_layer=norm_layer)
     elif netG == 'unet_128':
         net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
     elif netG == 'unet_256':
@@ -1674,7 +1674,10 @@ class ObeliskLayer(nn.Module):
             x = F.interpolate(x, size=half_res, mode='trilinear' if dimensions==3 else 'bilinear', align_corners=False)
         return x
 
-class StairNet(nn.Module):
+class SIT(nn.Module):
+    """
+    The Scout-Identify-Transform network for modality translation.
+    """
     def __init__(self, C: tuple, factor=4, norm_layer=nn.InstanceNorm2d):
         super().__init__()
         C_in, C_mid, C_out = C
