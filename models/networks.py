@@ -1519,17 +1519,33 @@ class NLayerDiscriminator(nn.Module):
         nf_mult_prev = nf_mult
         nf_mult = min(2 ** n_layers, 8)
         sequence += [
-            conv(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=1, padding=padw, bias=use_bias),
-            norm_layer(ndf * nf_mult),
+            conv(ndf * nf_mult_prev, ndf * nf_mult_prev, kernel_size=kw, stride=1, padding=padw, bias=use_bias),
+            norm_layer(ndf * nf_mult_prev),
+            nn.LeakyReLU(0.2, True),
+            conv(ndf * nf_mult_prev, ndf * nf_mult_prev, kernel_size=kw, stride=1, padding=padw, bias=use_bias),
+            norm_layer(ndf * nf_mult_prev),
             nn.LeakyReLU(0.2, True)
         ]
 
-        sequence += [conv(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)]  # output 1 channel prediction map
+        sequence += [conv(ndf * nf_mult_prev, 1, kernel_size=kw, stride=1, padding=padw)]  # output 1 channel prediction map
         self.model = nn.Sequential(*sequence)
 
-    def forward(self, input):
+    def forward(self, input, layers=None, encode_only=False):
         """Standard forward."""
-        return self.model(input)
+        if not layers:
+            layers = []
+        feat = input
+        feats = []
+        for layer_id, layer in enumerate(self.model):
+            feat = layer(feat)
+            if layer_id in layers:
+                feats.append(feat)
+            if encode_only and layer_id == layers[-1]:
+                return feats
+        if len(layers) > 0:
+            return feat, feats
+        else:
+            return feat
 
 
 class PixelDiscriminator(nn.Module):

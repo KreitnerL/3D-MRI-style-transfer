@@ -78,6 +78,38 @@ class ColorJitter3D():
             self.brightness = float(torch.empty(1).uniform_(self.brightness_min_max[0], self.brightness_min_max[1]))
         if self.contrast_min_max:
             self.contrast = float(torch.empty(1).uniform_(self.contrast_min_max[0], self.contrast_min_max[1]))
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        self.update()
+        if self.brightness_min_max:
+            x = (self.brightness * x).float().clamp(0, 1.).to(x.dtype)
+        if self.contrast_min_max:
+            mean = torch.mean(x.float(), dim=(-4, -3, -2, -1), keepdim=True)
+            x = (self.contrast * x + (1.0 - self.contrast) * mean).float().clamp(0, 1.).to(x.dtype)
+        return x
+
+class ColorJitterSphere3D():
+    """
+    Randomly change the brightness and contrast an image.
+    A grayscale tensor with values between 0-1 and shape BxCxHxWxD is expected.
+    Args:
+        brightness (float (min, max)): How much to jitter brightness.
+            brightness_factor is chosen uniformly from [max(0, 1 - brightness), 1 + brightness]
+            or the given [min, max]. Should be non negative numbers.
+        contrast (float (min, max)): How much to jitter contrast.
+            contrast_factor is chosen uniformly from [max(0, 1 - contrast), 1 + contrast]
+            or the given [min, max]. Should be non negative numbers.
+    """
+    def __init__(self, brightness_min_max: tuple=None, contrast_min_max: tuple=None) -> None:
+        self.brightness_min_max = brightness_min_max
+        self.contrast_min_max = contrast_min_max
+        self.update()
+
+    def update(self):
+        if self.brightness_min_max:
+            self.brightness = float(torch.empty(1).uniform_(self.brightness_min_max[0], self.brightness_min_max[1]))
+        if self.contrast_min_max:
+            self.contrast = float(torch.empty(1).uniform_(self.contrast_min_max[0], self.contrast_min_max[1]))
         self.ranges = []
         for _ in range(3):
             start = torch.rand(1).item() * 10 - 5

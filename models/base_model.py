@@ -4,7 +4,7 @@ from collections import OrderedDict
 from abc import ABC, abstractmethod
 from util.visualizer import Visualizer
 from . import networks
-from util.util import colorFader, load_loss_log, load_val_log
+from util.util import colorFaderTensor, load_loss_log, load_val_log
 
 
 class BaseModel(ABC):
@@ -187,23 +187,26 @@ class BaseModel(ABC):
         visual_ret = OrderedDict()
         for name in self.visual_names:
             if isinstance(name, str):
-                tmp = getattr(self, name)
+                tmp = getattr(self, name).detach().cpu()
                 if tmp.dim() == 5:
                     # For 3D data, take a slice along the z-axis
                     if slice:
-                        tmp = tmp[:,0:1,:,:,int(tmp.shape[-1]/2)].detach().cpu()
+                        tmp = tmp[:,0:1,:,:,int(tmp.shape[-1]/2)]
                 visual_ret[name] = tmp
         if self.opt.bayesian:
-            std_map: torch.Tensor = self.std_map
-            if std_map.dim() == 5:
-                std_map = std_map[:,0:1,:,:,int(std_map.shape[-1]/2)]
+            std_map: torch.Tensor = self.std_map[0:1,0:1]
+            if std_map.dim() == 5 and slice:
+                std_map = std_map[:,:,:,:,std_map.shape[-1]//2].clone()
             shape = std_map.shape
-            std_map = std_map.view(shape[0], -1)
-            std_map -= std_map.min(1, keepdim=True)[0]
-            std_map /= std_map.max(1, keepdim=True)[0]
-            std_map = torch.stack([torch.stack([colorFader(aij) for aij in std_map[i]]) for i in range(shape[0])])
-            std_map = std_map.permute(0,2,1)
-            std_map = std_map.view(shape[0], 3, *shape[2:])
+    
+            std_map -= std_map.min()
+            std_map /= std_map.max()
+            std_map = std_map.float()
+            if slice:
+                std_map = std_map.view(1, -1)
+                std_map = colorFaderTensor(std_map)
+                std_map = std_map.permute(0,2,1)
+                std_map = std_map.view(shape[0], 3, *shape[2:])
             visual_ret['confidence'] = std_map
         return visual_ret
 

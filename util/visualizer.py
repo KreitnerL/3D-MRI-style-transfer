@@ -26,15 +26,16 @@ def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256):
     This function will save images stored in 'visuals' to the HTML file specified by 'webpage'.
     """
     image_dir = webpage.get_image_dir()
-    short_path = ntpath.basename(image_path[0])
-    name = os.path.splitext(short_path)[0]
+    short_path: str = ntpath.basename(image_path[0])
+    path_elemenst = short_path.split('.')
+    name = path_elemenst[0]
 
     webpage.add_header(name)
     ims, txts, links = [], [], []
 
     for label, im_data in visuals.items():
         im = util.tensor2im(im_data)
-        image_name = '%s/%s.png' % (label, name)
+        image_name = f'{label}/{name}_{label}.png'
         os.makedirs(os.path.join(image_dir, label), exist_ok=True)
         save_path = os.path.join(image_dir, image_name)
         util.save_image(im, save_path, aspect_ratio=aspect_ratio)
@@ -45,11 +46,16 @@ def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256):
 
 def save_3D_images(webpage, visuals, image_path: str):
     image_dir = webpage.get_image_dir()
-    short_path = ntpath.basename(image_path[0])
+    short_path: str = ntpath.basename(image_path[0])
+    path_elemenst = short_path.split('.')
+    name = path_elemenst[0]
+    extension = '.'.join(path_elemenst[1:])
     for label, im_data in visuals.items():
-        if 'fake' not in label:
+        if 'fake' not in label and 'confidence' not in label:
             continue
-        image_name = '%s/%s' % (label, short_path)
+        # if 'fake' in label:
+        im_data *= 255
+        image_name = f'{label}/{name}_{label}.{extension}'
         os.makedirs(os.path.join(image_dir, label), exist_ok=True)
         save_path = os.path.join(image_dir, image_name)
         util.save_nifti_image(im_data, save_path)
