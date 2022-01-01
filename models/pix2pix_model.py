@@ -33,7 +33,7 @@ class Pix2PixModel(BaseModel):
         if is_train:
             parser.set_defaults(pool_size=0, gan_mode='lsgan', paired=True)
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
-            parser.add_argument('--perceptual', default=True, help="If true use perceptual loss")
+            parser.add_argument('--perceptual', action='store_true', help="If true use perceptual loss")
 
         return parser
 

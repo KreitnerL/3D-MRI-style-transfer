@@ -47,9 +47,9 @@ def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256):
 def save_3D_images(webpage, visuals, image_path: str):
     image_dir = webpage.get_image_dir()
     short_path: str = ntpath.basename(image_path[0])
-    path_elemenst = short_path.split('.')
-    name = path_elemenst[0]
-    extension = '.'.join(path_elemenst[1:])
+    path_elements = short_path.split('.')
+    name = path_elements[0]
+    extension = '.'.join(path_elements[1:])
     for label, im_data in visuals.items():
         if 'fake' not in label and 'confidence' not in label:
             continue
