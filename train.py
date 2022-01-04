@@ -39,7 +39,7 @@ if __name__ == '__main__':
         epoch_start_time = time.time()  # timer for entire epoch
         iter_data_time = time.time()    # timer for data loading per iteration
         epoch_iter = 0                  # the number of training iterations in current epoch, reset to 0 every epoch
-        # visualizer.reset()              # reset the visualizer: make sure it saves the results to HTML at least once every epoch
+        visualizer.reset()              # reset the visualizer: make sure it saves the results to HTML at least once every epoch
 
         dataset.set_epoch(epoch)
         pbar = tqdm(dataset, total=int(len(dataset) / opt.batch_size))
@@ -80,7 +80,7 @@ if __name__ == '__main__':
                 model.test()
                 opt.phase='train'
                 opt.serial_batches, opt.paired = tmp
-                save_result = ((total_iters - opt.display_freq) / epoch) % opt.update_html_freq == 0
+                save_result = epoch % opt.update_html_freq == 0
                 visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
                 test_data = None
 

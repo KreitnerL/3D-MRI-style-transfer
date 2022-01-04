@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import re
 import matplotlib as mpl
 
-def colorFader(mix: float, c1='g',c2='r'): #fade (linear interpolate) from color c1 (at mix=0) to c2 (mix=1)
+def colorFader(mix: float, c1='k',c2='r'): #fade (linear interpolate) from color c1 (at mix=0) to c2 (mix=1)
     """
     Given a float number in the range [0,1], returns a interpolated gradient rgb color of the color c1 and c2
     https://stackoverflow.com/a/50784012
@@ -22,7 +22,7 @@ def colorFader(mix: float, c1='g',c2='r'): #fade (linear interpolate) from color
     c2=np.array(mpl.colors.to_rgb(c2))
     return (1-mix)*c1 + mix*c2
 
-def colorFaderTensor(mix: torch.Tensor, c1='g',c2='r'): #fade (linear interpolate) from color c1 (at mix=0) to c2 (mix=1)
+def colorFaderTensor(mix: torch.Tensor, c1='k',c2='r'): #fade (linear interpolate) from color c1 (at mix=0) to c2 (mix=1)
     """
     Given a float number in the range [0,1], returns a interpolated gradient rgb color of the color c1 and c2
     https://stackoverflow.com/a/50784012

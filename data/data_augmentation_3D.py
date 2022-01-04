@@ -100,9 +100,10 @@ class ColorJitterSphere3D():
             contrast_factor is chosen uniformly from [max(0, 1 - contrast), 1 + contrast]
             or the given [min, max]. Should be non negative numbers.
     """
-    def __init__(self, brightness_min_max: tuple=None, contrast_min_max: tuple=None) -> None:
+    def __init__(self, brightness_min_max: tuple=None, contrast_min_max: tuple=None, sigma=1) -> None:
         self.brightness_min_max = brightness_min_max
         self.contrast_min_max = contrast_min_max
+        self.sigma = sigma
         self.update()
 
     def update(self):
@@ -122,7 +123,7 @@ class ColorJitterSphere3D():
         jitterSphere = torch.zeros(1)
         for i,r in enumerate(self.ranges):
             jitterSphere_i = torch.linspace(*r, steps=x.shape[i + 1])
-            jitterSphere_i = 1.08 * 2.71**(-0.5 * jitterSphere_i ** 2) # Random section of a normal distribution between (-5,5)
+            jitterSphere_i = (1 / (self.sigma * 2.51)) * 2.71**(-0.5 * (jitterSphere_i/self.sigma) ** 2) # Random section of a normal distribution between (-5,5)
             jitterSphere = jitterSphere.unsqueeze(-1) + jitterSphere_i.view(1, *[1]*i, -1)
         jitterSphere /= torch.max(jitterSphere) # Random 3D section of a normal distribution sphere
         

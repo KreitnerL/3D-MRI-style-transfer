@@ -21,24 +21,27 @@ class MRIDataset(BaseDataset):
         opt.no_antialias = True
         opt.no_antialias_up = True
 
-        self.transformations = [
+        transformations = [
             transforms.Lambda(lambda x: self.toGrayScale(x)),
             transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float16 if opt.amp else torch.float32)),
             PadIfNecessary(3),
         ]
+        self.updateTransformations = []
 
         if(opt.phase == 'train'):
-            self.transformations += [
+            self.updateTransformations += [
                 SpatialRotation([(1,2), (1,3), (2,3)], [0,1,2,3], auto_update=False),
                 SpatialFlip(dims=(1,2,3), auto_update=False),
                 ColorJitter3D(brightness_min_max=(0.3, 1.5), contrast_min_max=(0.3, 1.5))
             ]
         else:
-            self.transformations += [SpatialRotation([(1,2)])]
-        self.mri_transform = transforms.Compose(self.transformations)
+            self.updateTransformations += [SpatialRotation([(1,2)], [2])]
+            self.updateTransformations += [SpatialRotation([(1,3)], [1])]
+        transformations += self.updateTransformations
+        self.mri_transform = transforms.Compose(transformations)
         self.ct_transform = transforms.Compose([
-            transforms.Lambda(lambda x: (np.clip(x, -1024., 1024.) + 1024.) / 2048.),
-            *self.transformations[1:-1 if opt.phase == 'train' else None]
+            transforms.Lambda(lambda x: (np.clip(x, -1000., 1000.) + 1000.) / 2000.),
+            *transformations[1:-1 if opt.phase == 'train' else None]
         ])
 
     def toGrayScale(self, x):
@@ -51,7 +54,7 @@ class MRIDataset(BaseDataset):
         return (x - mean) / std
 
     def updateDataAugmentation(self):
-        for t in self.transformations[-2:]:
+        for t in self.updateTransformations:
             t.update()
 
     def __getitem__(self, index):

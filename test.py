@@ -50,7 +50,7 @@ if __name__ == '__main__':
     print('creating web directory', web_dir)
     webpage = html.HTML(web_dir, 'Experiment = %s, Phase = %s, Epoch = %s' % (opt.name, opt.phase, opt.epoch))
 
-    for i, data in enumerate(tqdm(dataset, total=opt.num_test, desc=f'Testing {opt.num_test} samples...')):
+    for i, data in enumerate(tqdm(dataset, total=opt.num_test, desc='Testing')):
         if i == 0:
             model.data_dependent_initialize(data)
             model.setup(opt)               # regular setup: load and print networks; create schedulers

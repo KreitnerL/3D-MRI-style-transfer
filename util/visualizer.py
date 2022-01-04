@@ -141,40 +141,47 @@ class Visualizer():
             ncols = self.ncols
             if ncols > 0:        # show all the images in one visdom panel
                 ncols = min(ncols, len(visuals))
-                h, w = next(iter(visuals.values())).shape[:2]
-                table_css = """<style>
-                        table {border-collapse: separate; border-spacing: 4px; white-space: nowrap; text-align: center}
-                        table td {width: % dpx; height: % dpx; padding: 4px; outline: 4px solid black}
-                        </style>""" % (w, h)  # create a table css
-                # create a table of images.
-                title = self.name
-                label_html = ''
-                label_html_row = ''
-                images = []
-                idx = 0
-                for label, image in visuals.items():
-                    image_numpy = util.tensor2im(image)
-                    label_html_row += '<td>%s</td>' % label
-                    images.append(image_numpy.transpose([2, 0, 1]))
-                    idx += 1
-                    if idx % ncols == 0:
+                nrows = len(list(visuals.values())[0])
+                for i in range(nrows):
+                    h, w = next(iter(visuals.values()))[i].shape[:2]
+                    table_css = """<style>
+                            table {border-collapse: separate; border-spacing: 4px; white-space: nowrap; text-align: center}
+                            table td {width: % dpx; height: % dpx; padding: 4px; outline: 4px solid black}
+                            </style>""" % (w, h)  # create a table css
+                    # create a table of images.
+                    title = self.name + ' images:'
+                    label_html = ''
+                    label_html_row = ''
+                    images = []
+                    idx = 0
+                    for label, image in visuals.items():
+                        title += f' {label},'
+                        image = image[i]
+                        image_numpy = util.tensor2im(image)
+                        label_html_row += '<td>%s</td>' % label
+                        images.append(image_numpy.transpose([2, 0, 1]))
+                        idx += 1
+                        if idx % ncols == 0:
+                            label_html += '<tr>%s</tr>' % label_html_row
+                            label_html_row = ''
+                    white_image = np.ones_like(image_numpy.transpose([2, 0, 1])) * 255
+                    while idx % ncols != 0:
+                        images.append(white_image)
+                        label_html_row += '<td></td>'
+                        idx += 1
+                    if label_html_row != '':
                         label_html += '<tr>%s</tr>' % label_html_row
-                        label_html_row = ''
-                white_image = np.ones_like(image_numpy.transpose([2, 0, 1])) * 255
-                while idx % ncols != 0:
-                    images.append(white_image)
-                    label_html_row += '<td></td>'
-                    idx += 1
-                if label_html_row != '':
-                    label_html += '<tr>%s</tr>' % label_html_row
-                try:
-                    self.vis.images(images, ncols, 2, self.display_id + 1,
-                                    None, dict(title=title + ' images'))
-                    label_html = '<table>%s</table>' % label_html
-                    self.vis.text(table_css + label_html, win=self.display_id + 2,
-                                  opts=dict(title=title + ' labels'))
-                except VisdomExceptionBase:
-                    self.create_visdom_connections()
+                    try:
+                        self.vis.images(images, ncols, 2, self.display_id + 1 + i,
+                                        None, dict(title=title[:-1]))
+                    except VisdomExceptionBase:
+                        self.create_visdom_connections()
+                # try:
+                #     label_html = '<table>%s</table>' % label_html
+                #     self.vis.text(table_css + label_html, win=self.display_id + i + 2,
+                #                   opts=dict(title=title + ' labels'))
+                # except VisdomExceptionBase:
+                #         self.create_visdom_connections()
 
             else:     # show each image in a separate visdom panel;
                 idx = 1
@@ -195,7 +202,7 @@ class Visualizer():
             self.saved = True
             # save images to the disk
             for label, image in visuals.items():
-                image_numpy = util.tensor2im(image)
+                image_numpy = util.tensor2im(image[-1])
                 img_path = os.path.join(self.img_dir, 'epoch%.3d_%s.png' % (epoch, label))
                 util.save_image(image_numpy, img_path)
 

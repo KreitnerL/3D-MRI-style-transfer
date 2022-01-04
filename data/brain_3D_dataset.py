@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from models.networks import setDimensions
 from data.mri_dataset import MRIDataset
-from data.data_augmentation_3D import PadIfNecessary, SpatialRotation, SpatialFlip
+from data.data_augmentation_3D import ColorJitter3D, PadIfNecessary, SpatialRotation, SpatialFlip
 
 class brain3DDataset(MRIDataset):
     def __init__(self, opt):
@@ -21,22 +21,26 @@ class brain3DDataset(MRIDataset):
         opt.input_nc = 2
         opt.output_nc = 1
 
-        self.transformations = [
-            transforms.Lambda(lambda x: x[:,28:164,26:198,12:156]), # 192x160x224
+        transformations = [
+            transforms.Lambda(lambda x: x[:,24:168,18:206,8:160]),
             # transforms.Lambda(lambda x: resize(x, (x.shape[0],96,80,112), order=1, anti_aliasing=True)),
             transforms.Lambda(lambda x: self.toGrayScale(x)),
             transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float16 if opt.amp else torch.float32)),
             PadIfNecessary(3),
         ]
+        self.updateTransformations = []
 
         if(opt.phase == 'train'):
-            self.transformations += [
+            self.updateTransformations += [
                 SpatialRotation([(1,2), (1,3), (2,3)], [0,1,2,3], auto_update=False),
                 SpatialFlip(dims=(1,2,3), auto_update=False),
+                ColorJitter3D((0.3,1.5), (0.3,1,5))
             ]
         else:
-            self.transformations += [SpatialRotation([(1,2)], [1])]
-        self.transform = transforms.Compose(self.transformations)
+            self.updateTransformations += [SpatialRotation([(1,2)], [2])]
+            self.updateTransformations += [SpatialRotation([(1,3)], [1])]
+        transformations += self.updateTransformations
+        self.transform = transforms.Compose(transformations)
 
     def __getitem__(self, index):
         A1_path = self.A1_paths[index % self.A_size]  # make sure index is within then range
@@ -56,3 +60,11 @@ class brain3DDataset(MRIDataset):
         A = torch.concat((A1, A2), dim=0)
         B = self.transform(B_img[np.newaxis, ...])
         return {'A': A, 'B': B, 'A_paths': A1_path, 'B_paths': B_path}
+
+    def __len__(self):
+        """Return the total number of images in the dataset.
+
+        As we have two datasets with potentially different number of images,
+        we take a maximum of
+        """
+        return max(self.A_size, self.B_size)

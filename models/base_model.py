@@ -191,23 +191,30 @@ class BaseModel(ABC):
                 if tmp.dim() == 5:
                     # For 3D data, take a slice along the z-axis
                     if slice:
-                        tmp = tmp[:,0:1,:,:,int(tmp.shape[-1]/2)]
-                visual_ret[name] = tmp
+                        visual_ret[name] = [tmp[:,0:1,:,:,tmp.shape[-1]//2], tmp[:,0:1,:,tmp.shape[-1]//2,:], tmp[:,0:1,tmp.shape[-1]//2,:,:]]
+                    else:
+                        visual_ret[name] = [tmp]
         if self.opt.bayesian:
             std_map: torch.Tensor = self.std_map[0:1,0:1]
             if std_map.dim() == 5 and slice:
-                std_map = std_map[:,:,:,:,std_map.shape[-1]//2].clone()
-            shape = std_map.shape
-    
-            std_map -= std_map.min()
-            std_map /= std_map.max()
-            std_map = std_map.float()
-            if slice:
-                std_map = std_map.view(1, -1)
-                std_map = colorFaderTensor(std_map)
-                std_map = std_map.permute(0,2,1)
-                std_map = std_map.view(shape[0], 3, *shape[2:])
-            visual_ret['confidence'] = std_map
+                std_maps = []
+                for i in range(4,1,-1):
+                    std_map_i = std_map.select(i, std_map.shape[i]//2).clone()
+                    shape = std_map_i.shape
+                    std_map_i -= std_map_i.min()
+                    std_map_i /= std_map_i.max()
+                    std_map_i = std_map_i.float()
+                    std_map_i = std_map_i.view(1, -1)
+                    std_map_i = colorFaderTensor(std_map_i)
+                    std_map_i = std_map_i.permute(0,2,1)
+                    std_map_i = std_map_i.view(shape[0], 3, *shape[2:])
+                    std_maps.append(std_map_i)
+                visual_ret['confidence'] = std_maps
+            else:
+                std_map -= std_map.min()
+                std_map /= std_map.max()
+                std_map = std_map.float()
+                visual_ret['confidence'] = [std_map]
         return visual_ret
 
     def get_current_losses(self):
