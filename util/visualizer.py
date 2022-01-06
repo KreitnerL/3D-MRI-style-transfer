@@ -34,11 +34,18 @@ def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256):
     ims, txts, links = [], [], []
 
     for label, im_data in visuals.items():
-        im = util.tensor2im(im_data)
-        image_name = f'{label}/{name}_{label}.png'
         os.makedirs(os.path.join(image_dir, label), exist_ok=True)
-        save_path = os.path.join(image_dir, image_name)
-        util.save_image(im, save_path, aspect_ratio=aspect_ratio)
+        if isinstance(im_data, list) and len(im_data)>1:
+            for i,v in enumerate(im_data):
+                image_name = f'{label}/{name}_{label}_{i}.png'
+                save_path = os.path.join(image_dir, image_name)
+                v = util.tensor2im(v)
+                util.save_image(v, save_path, aspect_ratio=aspect_ratio)
+        else:
+            image_name = f'{label}/{name}_{label}.png'
+            save_path = os.path.join(image_dir, image_name)
+            v = util.tensor2im(v)
+            util.save_image(v, save_path, aspect_ratio=aspect_ratio)
         ims.append(image_name)
         txts.append(label)
         links.append(image_name)
@@ -54,11 +61,19 @@ def save_3D_images(webpage, visuals, image_path: str):
         if 'fake' not in label and 'confidence' not in label:
             continue
         # if 'fake' in label:
-        im_data *= 255
-        image_name = f'{label}/{name}_{label}.{extension}'
-        os.makedirs(os.path.join(image_dir, label), exist_ok=True)
-        save_path = os.path.join(image_dir, image_name)
-        util.save_nifti_image(im_data, save_path)
+        if len(im_data)>1:
+            for i,v in enumerate(im_data):
+                v *= 255
+                image_name = f'{label}/{name}_{label}_{i}.{extension}'
+                os.makedirs(os.path.join(image_dir, label), exist_ok=True)
+                save_path = os.path.join(image_dir, image_name)
+                util.save_nifti_image(v, save_path)
+        else:
+            im_data = im_data[0] * 255
+            image_name = f'{label}/{name}_{label}.{extension}'
+            os.makedirs(os.path.join(image_dir, label), exist_ok=True)
+            save_path = os.path.join(image_dir, image_name)
+            util.save_nifti_image(im_data, save_path)
 
 class Visualizer():
     """This class includes several functions that can display/save images and print/save logging information.
