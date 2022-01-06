@@ -107,7 +107,7 @@ class Pix2PixModel(BaseModel):
             self.loss_G_perceptual = torch.tensor(0, device=self.opt.gpu_ids[0], dtype=torch.float16)
             if self.opt.perceptual:
                 feats_real = self.netD(torch.cat((self.real_A, self.real_B), 1).detach(), layers=[0, 3, 6, 9], encode_only=True)
-                for i, λ_i in enumerate([5, 1.5, 1.5, 1]):
+                for i, λ_i in enumerate(torch.tensor([5, 1.5, 1.5, 1]).numpy()*1.5):
                     self.loss_G_perceptual += λ_i * self.perceptual_loss(feats_fake[i], feats_real[i])
             # combine loss and calculate gradients
             self.loss_G = self.loss_G_GAN + self.loss_G_L1 + self.loss_G_perceptual

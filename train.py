@@ -116,7 +116,7 @@ if __name__ == '__main__':
             validation_loss_array.append(validation_loss_fun(model.fake_B, model.real_B).item())
             validation_loss_array2.append(1 - validation_loss_fun2(model.fake_B, model.real_B).item())
         
-        val_loss = [np.mean(validation_loss_array), np.mean(validation_loss_array2)]
+        val_loss = {'L1': np.mean(validation_loss_array), '1-SSIM': np.mean(validation_loss_array2)}
         visualizer.print_validation_loss(epoch, val_loss)
         visualizer.plot_current_validation_losses(epoch, val_loss)
         opt.phase='train'

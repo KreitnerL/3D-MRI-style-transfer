@@ -13,12 +13,13 @@ class SpatialRotation():
         self.update()
 
     def update(self):
-        self.args = (random.choice(self.k), random.choice(self.dimensions))
+        self.args = [random.choice(self.k) for dim in self.dimensions]
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
         if self.auto_update:
             self.update()
-        x = torch.rot90(x, *self.args)
+        for k, dim in zip(self.args, self.dimensions):
+            x = torch.rot90(x, k, dim)
         return x
 
 class SpatialFlip():

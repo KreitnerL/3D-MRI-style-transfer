@@ -202,14 +202,19 @@ def correct_resize(t, size, mode=Image.BICUBIC):
 
 def load_val_log(path: str):
     val = []
+    legend = None
     with open(path) as f:
         lines = [line.rstrip() for line in f]
     for line in lines:
         if line.startswith('='):
             val = []
             continue
-        val.append(float(line.split(': ')[-1]))
-    return val
+        line = line.split(') ')[-1]
+        ls = line.split(', ')
+        val.append([float(l.split(': ')[-1]) for l in ls])
+        if legend is None:
+            legend = [l.split(': ')[0] for l in ls]
+    return val, legend
 
 def val_log_2_png(path: str):
     folder_path = os.path.dirname(path)

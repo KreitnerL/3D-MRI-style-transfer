@@ -33,14 +33,14 @@ class brain3DDataset(MRIDataset):
         if(opt.phase == 'train'):
             self.updateTransformations += [
                 SpatialRotation([(1,2), (1,3), (2,3)], [0,1,2,3], auto_update=False),
-                SpatialFlip(dims=(1,2,3), auto_update=False),
-                ColorJitter3D((0.3,1.5), (0.3,1,5))
+                SpatialFlip(dims=(1,2,3), auto_update=False)
             ]
         else:
             self.updateTransformations += [SpatialRotation([(1,2)], [2])]
             self.updateTransformations += [SpatialRotation([(1,3)], [1])]
         transformations += self.updateTransformations
         self.transform = transforms.Compose(transformations)
+        self.colorJitter = ColorJitter3D((0.3,1.5), (0.3,1,5))
 
     def __getitem__(self, index):
         A1_path = self.A1_paths[index % self.A_size]  # make sure index is within then range
@@ -56,7 +56,9 @@ class brain3DDataset(MRIDataset):
             B_path = self.B_paths[index_B]
             B_img = np.array(nib.load(B_path).get_fdata())
         A1 = self.transform(A1_img[np.newaxis, ...])
+        A1 = self.colorJitter(A1)
         A2 = self.transform(A2_img[np.newaxis, ...])
+        A2 = self.colorJitter(A2)
         A = torch.concat((A1, A2), dim=0)
         B = self.transform(B_img[np.newaxis, ...])
         return {'A': A, 'B': B, 'A_paths': A1_path, 'B_paths': B_path}

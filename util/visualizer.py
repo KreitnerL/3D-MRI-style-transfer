@@ -198,7 +198,7 @@ class Visualizer():
                 except VisdomExceptionBase:
                     self.create_visdom_connections()
 
-        if self.use_html and (save_result or not self.saved):  # save images to an HTML file if they haven't been saved.
+        if self.use_html and (save_result and not self.saved):  # save images to an HTML file if they haven't been saved.
             self.saved = True
             # save images to the disk
             for label, image in visuals.items():
@@ -293,7 +293,7 @@ class Visualizer():
         with open(self.log_name, "a") as log_file:
             log_file.write('%s\n' % message)  # save the message
 
-    def plot_current_validation_losses(self, epoch, loss):
+    def plot_current_validation_losses(self, epoch: int=None, loss: dict=None):
         """display the current validation losses on visdom display: dictionary of error labels and values
 
         Parameters:
@@ -305,13 +305,14 @@ class Visualizer():
         plot_name = 'validation_loss'
 
         if plot_name not in self.plot_data:
-            self.plot_data[plot_name] = {'X': [], 'Y': [], 'legend': ['L1 loss', '1 - SSIM']}
+            self.plot_data[plot_name] = {'X': [], 'Y': [], 'legend': list(loss.keys())}
 
         plot_data = self.plot_data[plot_name]
         plot_id = list(self.plot_data.keys()).index('validation_loss')
 
-        plot_data['X'].append(epoch*1.)
-        plot_data['Y'].append(loss)
+        if epoch is not None:
+            plot_data['X'].append(epoch*1.)
+            plot_data['Y'].append(list(loss.values()))
         plt.figure(1)
         plt.plot(plot_data['X'], plot_data['Y'])
         plt.legend(plot_data['legend'])
@@ -345,6 +346,8 @@ class Visualizer():
         return message2
 
     def print_validation_loss(self, epoch, loss):
-        message = 'Validation loss epoch %d: %.3f, %.3f'%(epoch, *loss)
+        message = f'(epoch: {epoch}) '
+        for k,v in loss.items():
+            message += '%s: %.3f ' % (k, v)
         with open(self.val_loss_log_name, "a") as log_file:
             log_file.write('%s\n' % message)  # save the message

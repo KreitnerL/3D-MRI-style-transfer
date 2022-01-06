@@ -35,8 +35,7 @@ class MRIDataset(BaseDataset):
                 ColorJitter3D(brightness_min_max=(0.3, 1.5), contrast_min_max=(0.3, 1.5))
             ]
         else:
-            self.updateTransformations += [SpatialRotation([(1,2)], [2])]
-            self.updateTransformations += [SpatialRotation([(1,3)], [1])]
+            self.updateTransformations += [SpatialRotation([(1,3)], [3])]
         transformations += self.updateTransformations
         self.mri_transform = transforms.Compose(transformations)
         self.ct_transform = transforms.Compose([
