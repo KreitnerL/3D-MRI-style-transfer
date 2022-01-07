@@ -51,29 +51,28 @@ def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256):
         links.append(image_name)
     webpage.add_images(ims, txts, links, width=width)
 
-def save_3D_images(webpage, visuals, image_path: str):
+def save_3D_images(webpage, visuals, image_path: str, affine: np.ndarray, axis_code: str):
     image_dir = webpage.get_image_dir()
     short_path: str = ntpath.basename(image_path[0])
     path_elements = short_path.split('.')
     name = path_elements[0]
     extension = '.'.join(path_elements[1:])
     for label, im_data in visuals.items():
-        if 'fake' not in label and 'confidence' not in label:
-            continue
-        # if 'fake' in label:
+        # if 'fake' not in label and 'confidence' not in label:
+        #     continue
         if len(im_data)>1:
             for i,v in enumerate(im_data):
                 v *= 255
                 image_name = f'{label}/{name}_{label}_{i}.{extension}'
                 os.makedirs(os.path.join(image_dir, label), exist_ok=True)
                 save_path = os.path.join(image_dir, image_name)
-                util.save_nifti_image(v, save_path)
+                util.save_nifti_image(v, save_path, affine, axis_code)
         else:
             im_data = im_data[0] * 255
             image_name = f'{label}/{name}_{label}.{extension}'
             os.makedirs(os.path.join(image_dir, label), exist_ok=True)
             save_path = os.path.join(image_dir, image_name)
-            util.save_nifti_image(im_data, save_path)
+            util.save_nifti_image(im_data, save_path, affine, axis_code)
 
 class Visualizer():
     """This class includes several functions that can display/save images and print/save logging information.

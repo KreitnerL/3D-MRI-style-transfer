@@ -36,7 +36,7 @@ class CUTModel(BaseModel):
                             type=util.str2bool, nargs='?', const=True, default=False,
                             help="Enforce flip-equivariance as additional regularization. It's used by FastCUT, but not CUT")
 
-        parser.set_defaults(pool_size=0)  # no image pooling
+        parser.set_defaults(pool_size=0, paired=False)  # no image pooling
 
         opt, _ = parser.parse_known_args()
 

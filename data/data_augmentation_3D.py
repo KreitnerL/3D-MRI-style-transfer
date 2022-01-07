@@ -2,6 +2,7 @@ import random
 import torch.nn.functional as F
 from collections.abc import Sequence
 import torch
+import nibabel as nib
 
 
 class SpatialRotation():
@@ -101,10 +102,11 @@ class ColorJitterSphere3D():
             contrast_factor is chosen uniformly from [max(0, 1 - contrast), 1 + contrast]
             or the given [min, max]. Should be non negative numbers.
     """
-    def __init__(self, brightness_min_max: tuple=None, contrast_min_max: tuple=None, sigma=1) -> None:
+    def __init__(self, brightness_min_max: tuple=None, contrast_min_max: tuple=None, sigma: float=1., dims: int=3) -> None:
         self.brightness_min_max = brightness_min_max
         self.contrast_min_max = contrast_min_max
         self.sigma = sigma
+        self.dims = dims
         self.update()
 
     def update(self):
@@ -113,7 +115,7 @@ class ColorJitterSphere3D():
         if self.contrast_min_max:
             self.contrast = float(torch.empty(1).uniform_(self.contrast_min_max[0], self.contrast_min_max[1]))
         self.ranges = []
-        for _ in range(3):
+        for _ in range(self.dims):
             start = torch.rand(1).item() * 10 - 5
             end = torch.rand(1).item() * ( 5 - start) + start
             self.ranges.append((start, end))
@@ -133,6 +135,13 @@ class ColorJitterSphere3D():
             x = (brightness * x).float().clamp(0, 1.).to(x.dtype)
         if self.contrast_min_max:
             contrast = (self.contrast - 1) * jitterSphere + 1
-            mean = torch.mean(x.float(), dim=(-4, -3, -2, -1), keepdim=True)
+            mean = torch.mean(x.float(), keepdim=True)
             x = (contrast * x + (1.0 - self.contrast) * mean).float().clamp(0, 1.).to(x.dtype)
         return x
+
+def getBetterOrientation(nifti: nib.Nifti1Image, axisCode="IPL"):
+    orig_ornt = nib.io_orientation(nifti.affine)
+    targ_ornt = nib.orientations.axcodes2ornt(axisCode)
+    transform = nib.orientations.ornt_transform(orig_ornt, targ_ornt)
+    nifti = nifti.as_reoriented(transform)
+    return nifti

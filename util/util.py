@@ -123,7 +123,7 @@ def save_image(image_numpy, image_path, aspect_ratio=1.0):
         image_pil = image_pil.resize((int(h / aspect_ratio), w), Image.BICUBIC)
     image_pil.save(image_path)
 
-def save_nifti_image(image_tensor: torch.Tensor, image_path):
+def save_nifti_image(image_tensor: torch.Tensor, image_path: str, affine: np.ndarray, axis_code: str):
     """
     Save a MRI numpy image to the disk. Resize the image by a scaling factor and enforce an aspect ratio of 1
     """
@@ -133,6 +133,10 @@ def save_nifti_image(image_tensor: torch.Tensor, image_path):
         rgb_dtype = np.dtype([('R', 'u1'), ('G', 'u1'), ('B', 'u1')])
         image_tensor = image_tensor.copy().view(dtype=rgb_dtype).reshape(shape_3d)  # copy used
     new_img = nib.Nifti1Image(image_tensor, np.eye(4))
+    orig_ornt = nib.io_orientation(affine)
+    transform = nib.orientations.ornt_transform(nib.orientations.axcodes2ornt(axis_code), orig_ornt)
+    new_img =  new_img.as_reoriented(transform)
+    new_img = nib.Nifti1Image(new_img.get_fdata(), affine)
     nib.save(new_img, image_path)
 
 

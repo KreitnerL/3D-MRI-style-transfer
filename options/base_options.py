@@ -52,7 +52,7 @@ class BaseOptions():
         parser.add_argument('--no_antialias_up', action='store_true', help='if specified, use [upconv(learned filter)] instead of [upconv(hard-coded [1,3,3,1] filter), conv]')
         # dataset parameters
         parser.add_argument('--dataset_mode', type=str, default='unaligned', help='chooses how datasets are loaded. [unaligned | aligned | single | colorization]')
-        parser.add_argument('--direction', type=str, default='AtoB', help='AtoB or BtoA')
+        parser.add_argument('--direction', type=str, default='AtoB', choices=['AtoB', 'BtoA'], help='AtoB or BtoA')
         parser.add_argument('--serial_batches', action='store_true', help='if true, takes images in order to make batches, otherwise takes them randomly')
         parser.add_argument('--paired', action='store_true', help='if true, uses the same index for the A and B sample')
         parser.add_argument('--num_threads', default=4, type=int, help='# threads for loading data')

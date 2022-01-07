@@ -1,6 +1,6 @@
 from data.image_folder import get_custom_file_paths, natural_sort
 from data.base_dataset import BaseDataset
-from data.data_augmentation_3D import PadIfNecessary, SpatialFlip, SpatialRotation, ColorJitter3D
+from data.data_augmentation_3D import PadIfNecessary, SpatialFlip, SpatialRotation, ColorJitterSphere3D, getBetterOrientation
 import nibabel as nib
 import random
 from torchvision import transforms
@@ -21,6 +21,13 @@ class MRIDataset(BaseDataset):
         opt.no_antialias = True
         opt.no_antialias_up = True
 
+        if opt.direction == 'AtoB':
+            opt.AtoB = True
+            opt.BtoA = False
+        else:
+            opt.AtoB = False
+            opt.BtoA = True
+
         transformations = [
             transforms.Lambda(lambda x: self.toGrayScale(x)),
             transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float16 if opt.amp else torch.float32)),
@@ -30,18 +37,13 @@ class MRIDataset(BaseDataset):
 
         if(opt.phase == 'train'):
             self.updateTransformations += [
-                SpatialRotation([(1,2), (1,3), (2,3)], [0,1,2,3], auto_update=False),
-                SpatialFlip(dims=(1,2,3), auto_update=False),
-                ColorJitter3D(brightness_min_max=(0.3, 1.5), contrast_min_max=(0.3, 1.5))
+                SpatialRotation([(1,2), (1,3), (2,3)], [*[0]*12,1,2,3], auto_update=False), # With a probability of approx. 51% no rotation is performed
+                SpatialFlip(dims=(1,2,3), auto_update=False)
             ]
-        else:
-            self.updateTransformations += [SpatialRotation([(1,3)], [3])]
         transformations += self.updateTransformations
         self.mri_transform = transforms.Compose(transformations)
-        self.ct_transform = transforms.Compose([
-            transforms.Lambda(lambda x: (np.clip(x, -1000., 1000.) + 1000.) / 2000.),
-            *transformations[1:-1 if opt.phase == 'train' else None]
-        ])
+        self.ct_transform = transforms.Compose(transformations[1:])
+        self.colorJitter = ColorJitterSphere3D((0.3, 1.5), (0.3,1.5), sigma=0.5) # ColorJitter3D(brightness_min_max=(0.3, 1.5), contrast_min_max=(0.3, 1.5))
 
     def toGrayScale(self, x):
         x_min = np.amin(x)
@@ -59,36 +61,44 @@ class MRIDataset(BaseDataset):
     def __getitem__(self, index):
         mri_path = self.mri_paths[index % self.mri_size]  # make sure index is within then range
         # mri_path = self.mri_paths[102]
-        mri_img = np.array(nib.load(mri_path).get_fdata())
+        nifti: nib.Nifti1Image = nib.load(mri_path)
+        if self.opt.AtoB:
+            affine = nifti.affine
+        nifti = getBetterOrientation(nifti, "IPL")
+        mri_img = np.array(nifti.get_fdata())
+
         if self.opt.paired:   # make sure index is within then range
             index_ct = index % self.ct_size
-            ct_path = self.ct_paths[index_ct]
-            ct_img = np.array(nib.load(ct_path).get_fdata())
         else:
-            while True: # Prevent big pairs
-                index_ct = random.randint(0, self.ct_size - 1)
-                # index_B = 3
-                ct_path = self.ct_paths[index_ct]
-                ct_img = np.array(nib.load(ct_path).get_fdata())
-                if np.prod(ct_img.shape) + np.prod(mri_img.shape) < 20000000:
-                    break
-                else:
-                    print('[WARNING]: skipped A: {0} with B:{1}'.format(mri_path, ct_path))
+            index_ct = random.randint(0, self.ct_size - 1)
+            # index_B = 3
+        ct_path = self.ct_paths[index_ct]
+        nifti: nib.Nifti1Image = nib.load(ct_path)
+        if self.opt.BtoA:
+            affine = nifti.affine
+        nifti = getBetterOrientation(nifti, "IPL")
+        ct_img = np.array(nifti.get_fdata())
         if self.surpress_registration_artifacts:
-            if self.opt.paired:
+            if self.opt.paired or self.opt.BtoA:
                 registration_artifacts_idx = ct_img==0
             else:
-                registration_artifacts_idx = np.array(nib.load(self.ct_paths[index % self.ct_size]).get_fdata()) == 0
-            registration_artifacts_idx = self.mri_transform(1- registration_artifacts_idx[np.newaxis, ...]*1.)
+                registration_artifacts_idx = np.array(getBetterOrientation(nib.load(self.ct_paths[index % self.ct_size]), "IPL").get_fdata()) == 0
+            if self.opt.BtoA:
+                mri_img[np.array(getBetterOrientation(nib.load(self.ct_paths[index % self.ct_size]), "IPL").get_fdata()) == 0] = np.min(mri_img)
+                registration_artifacts_idx = self.ct_transform(1- registration_artifacts_idx[np.newaxis, ...]*1.)
+            else:
+                registration_artifacts_idx = self.mri_transform(1- registration_artifacts_idx[np.newaxis, ...]*1.)
             ct_img[ct_img==0] = np.min(ct_img)
-        
-        # mri_img[mri_img==0] = np.min(mri_img)
         mri = self.mri_transform(mri_img[np.newaxis, ...])
+        if(self.opt.phase == 'train') and self.opt.AtoB:
+            mri = self.colorJitter(mri)
+        ct_img = (np.clip(ct_img, -1000., 1000.) + 1000.) / 2000.
         ct = self.ct_transform(ct_img[np.newaxis, ...])
+
+        data = {'A': mri, 'B': ct, 'affine': affine, 'axis_code': "IPL", 'A_paths': mri_path, 'B_paths': ct_path}
         if self.surpress_registration_artifacts:
-            return {'A': mri, 'B': ct, 'A_paths': mri_path, 'B_paths': ct_path, 'registration_artifacts_idx': registration_artifacts_idx}
-        else:
-            return {'A': mri, 'B': ct, 'A_paths': mri_path, 'B_paths': ct_path}
+            data['registration_artifacts_idx'] = registration_artifacts_idx
+        return data
 
     def __len__(self):
         """Return the total number of images in the dataset.
