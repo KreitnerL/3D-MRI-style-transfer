@@ -4,7 +4,7 @@ from collections import OrderedDict
 from abc import ABC, abstractmethod
 from util.visualizer import Visualizer
 from . import networks
-from util.util import colorFader, load_loss_log, load_val_log
+from util.util import colorFaderTensor, load_loss_log, load_val_log
 
 
 class BaseModel(ABC):
@@ -71,14 +71,19 @@ class BaseModel(ABC):
         """
         return parser
 
-    @abstractmethod
     def set_input(self, input):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
 
         Parameters:
             input (dict): includes the data itself and its metadata information.
         """
-        pass
+        AtoB = self.opt.direction == 'AtoB'
+        self.real_A = input['A' if AtoB else 'B'].to(self.device)
+        self.real_B = input['B' if AtoB else 'A'].to(self.device)
+        self.image_paths = input['A_paths' if AtoB else 'B_paths']
+        self.registration_artifacts_idx = None
+        if 'registration_artifacts_idx' in input:
+            self.registration_artifacts_idx = input['registration_artifacts_idx']
 
     @abstractmethod
     def forward(self):
@@ -114,10 +119,11 @@ class BaseModel(ABC):
                 self.load_networks(load_suffix)
         if self.isTrain and opt.continue_train and int(opt.epoch_count) > 0:
             loss_data = load_loss_log(os.path.join(load_dir, 'loss_log.txt'), opt.dataset_size)
-            y = load_val_log(os.path.join(load_dir, 'val_loss_log.txt'))
-            val_data = (list(range(len(y))), y, ['validation loss'])
+            y, legend = load_val_log(os.path.join(load_dir, 'val_loss_log.txt'))
+            val_data = (list(range(len(y))), y, legend)
             v: Visualizer = opt.visualizer
             v.set_plot_data(loss_data, val_data)
+            v.plot_current_validation_losses()
 
         self.print_networks(opt.verbose)
         if self.opt.phase=="train":
@@ -182,24 +188,34 @@ class BaseModel(ABC):
         visual_ret = OrderedDict()
         for name in self.visual_names:
             if isinstance(name, str):
-                tmp = getattr(self, name)
+                tmp = getattr(self, name).detach().cpu()
                 if tmp.dim() == 5:
                     # For 3D data, take a slice along the z-axis
                     if slice:
-                        tmp = tmp[:,:,:,:,int(tmp.shape[-1]/2)]
-                visual_ret[name] = tmp
+                        visual_ret[name] = [tmp[:,0:1,:,:,tmp.shape[-1]//2], tmp[:,0:1,:,tmp.shape[-2]//2,:], tmp[:,0:1,tmp.shape[-3]//2,:,:]]
+                    else:
+                        visual_ret[name] = [tmp]
         if self.opt.bayesian:
-            std_map: torch.Tensor = self.std_map
-            if std_map.dim() == 5:
-                std_map = std_map[:,:,:,:,int(std_map.shape[-1]/2)]
-            shape = std_map.shape
-            std_map = std_map.view(shape[0], -1)
-            std_map -= std_map.min(1, keepdim=True)[0]
-            std_map /= std_map.max(1, keepdim=True)[0]
-            std_map = torch.stack([torch.stack([colorFader(aij) for aij in std_map[i]]) for i in range(shape[0])])
-            std_map = std_map.permute(0,2,1)
-            std_map = std_map.view(shape[0], 3, *shape[2:])
-            visual_ret['confidence'] = std_map
+            std_map: torch.Tensor = self.std_map[0:1,0:1]
+            if std_map.dim() == 5 and slice:
+                std_maps = []
+                for i in range(4,1,-1):
+                    std_map_i = std_map.select(i, std_map.shape[i]//2).clone()
+                    shape = std_map_i.shape
+                    std_map_i -= std_map_i.min()
+                    std_map_i /= std_map_i.max()
+                    std_map_i = std_map_i.float()
+                    std_map_i = std_map_i.view(1, -1)
+                    std_map_i = colorFaderTensor(std_map_i)
+                    std_map_i = std_map_i.permute(0,2,1)
+                    std_map_i = std_map_i.view(shape[0], 3, *shape[2:])
+                    std_maps.append(std_map_i)
+                visual_ret['confidence'] = std_maps
+            else:
+                std_map -= std_map.min()
+                std_map /= std_map.max()
+                std_map = std_map.float()
+                visual_ret['confidence'] = [std_map]
         return visual_ret
 
     def get_current_losses(self):
@@ -207,7 +223,7 @@ class BaseModel(ABC):
         errors_ret = OrderedDict()
         for name in self.loss_names:
             if isinstance(name, str):
-                errors_ret[name] = float(getattr(self, 'loss_' + name))  # float(...) works for both scalar tensor and float number
+                errors_ret[name] = float(getattr(self, 'loss_' + name).detach().cpu())  # float(...) works for both scalar tensor and float number
         return errors_ret
 
     def save_networks(self, epoch):

@@ -26,33 +26,53 @@ def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256):
     This function will save images stored in 'visuals' to the HTML file specified by 'webpage'.
     """
     image_dir = webpage.get_image_dir()
-    short_path = ntpath.basename(image_path[0])
-    name = os.path.splitext(short_path)[0]
+    short_path: str = ntpath.basename(image_path[0])
+    path_elemenst = short_path.split('.')
+    name = path_elemenst[0]
 
     webpage.add_header(name)
     ims, txts, links = [], [], []
 
     for label, im_data in visuals.items():
-        im = util.tensor2im(im_data)
-        image_name = '%s/%s.png' % (label, name)
         os.makedirs(os.path.join(image_dir, label), exist_ok=True)
-        save_path = os.path.join(image_dir, image_name)
-        util.save_image(im, save_path, aspect_ratio=aspect_ratio)
+        if isinstance(im_data, list) and len(im_data)>1:
+            for i,v in enumerate(im_data):
+                image_name = f'{label}/{name}_{label}_{i}.png'
+                save_path = os.path.join(image_dir, image_name)
+                v = util.tensor2im(v)
+                util.save_image(v, save_path, aspect_ratio=aspect_ratio)
+        else:
+            image_name = f'{label}/{name}_{label}.png'
+            save_path = os.path.join(image_dir, image_name)
+            v = util.tensor2im(v)
+            util.save_image(v, save_path, aspect_ratio=aspect_ratio)
         ims.append(image_name)
         txts.append(label)
         links.append(image_name)
     webpage.add_images(ims, txts, links, width=width)
 
-def save_3D_images(webpage, visuals, image_path: str):
+def save_3D_images(webpage, visuals, image_path: str, affine: np.ndarray, axis_code: str):
     image_dir = webpage.get_image_dir()
-    short_path = ntpath.basename(image_path[0])
+    short_path: str = ntpath.basename(image_path[0])
+    path_elements = short_path.split('.')
+    name = path_elements[0]
+    extension = '.'.join(path_elements[1:])
     for label, im_data in visuals.items():
-        if 'fake' not in label:
-            continue
-        image_name = '%s/%s' % (label, short_path)
-        os.makedirs(os.path.join(image_dir, label), exist_ok=True)
-        save_path = os.path.join(image_dir, image_name)
-        util.save_nifti_image(im_data, save_path)
+        # if 'fake' not in label and 'confidence' not in label:
+        #     continue
+        if len(im_data)>1:
+            for i,v in enumerate(im_data):
+                v *= 255
+                image_name = f'{label}/{name}_{label}_{i}.{extension}'
+                os.makedirs(os.path.join(image_dir, label), exist_ok=True)
+                save_path = os.path.join(image_dir, image_name)
+                util.save_nifti_image(v, save_path, affine, axis_code)
+        else:
+            im_data = im_data[0] * 255
+            image_name = f'{label}/{name}_{label}.{extension}'
+            os.makedirs(os.path.join(image_dir, label), exist_ok=True)
+            save_path = os.path.join(image_dir, image_name)
+            util.save_nifti_image(im_data, save_path, affine, axis_code)
 
 class Visualizer():
     """This class includes several functions that can display/save images and print/save logging information.
@@ -135,40 +155,47 @@ class Visualizer():
             ncols = self.ncols
             if ncols > 0:        # show all the images in one visdom panel
                 ncols = min(ncols, len(visuals))
-                h, w = next(iter(visuals.values())).shape[:2]
-                table_css = """<style>
-                        table {border-collapse: separate; border-spacing: 4px; white-space: nowrap; text-align: center}
-                        table td {width: % dpx; height: % dpx; padding: 4px; outline: 4px solid black}
-                        </style>""" % (w, h)  # create a table css
-                # create a table of images.
-                title = self.name
-                label_html = ''
-                label_html_row = ''
-                images = []
-                idx = 0
-                for label, image in visuals.items():
-                    image_numpy = util.tensor2im(image)
-                    label_html_row += '<td>%s</td>' % label
-                    images.append(image_numpy.transpose([2, 0, 1]))
-                    idx += 1
-                    if idx % ncols == 0:
+                nrows = len(list(visuals.values())[0])
+                for i in range(nrows):
+                    h, w = next(iter(visuals.values()))[i].shape[:2]
+                    table_css = """<style>
+                            table {border-collapse: separate; border-spacing: 4px; white-space: nowrap; text-align: center}
+                            table td {width: % dpx; height: % dpx; padding: 4px; outline: 4px solid black}
+                            </style>""" % (w, h)  # create a table css
+                    # create a table of images.
+                    title = self.name + ' images:'
+                    label_html = ''
+                    label_html_row = ''
+                    images = []
+                    idx = 0
+                    for label, image in visuals.items():
+                        title += f' {label},'
+                        image = image[i]
+                        image_numpy = util.tensor2im(image)
+                        label_html_row += '<td>%s</td>' % label
+                        images.append(image_numpy.transpose([2, 0, 1]))
+                        idx += 1
+                        if idx % ncols == 0:
+                            label_html += '<tr>%s</tr>' % label_html_row
+                            label_html_row = ''
+                    white_image = np.ones_like(image_numpy.transpose([2, 0, 1])) * 255
+                    while idx % ncols != 0:
+                        images.append(white_image)
+                        label_html_row += '<td></td>'
+                        idx += 1
+                    if label_html_row != '':
                         label_html += '<tr>%s</tr>' % label_html_row
-                        label_html_row = ''
-                white_image = np.ones_like(image_numpy.transpose([2, 0, 1])) * 255
-                while idx % ncols != 0:
-                    images.append(white_image)
-                    label_html_row += '<td></td>'
-                    idx += 1
-                if label_html_row != '':
-                    label_html += '<tr>%s</tr>' % label_html_row
-                try:
-                    self.vis.images(images, ncols, 2, self.display_id + 1,
-                                    None, dict(title=title + ' images'))
-                    label_html = '<table>%s</table>' % label_html
-                    self.vis.text(table_css + label_html, win=self.display_id + 2,
-                                  opts=dict(title=title + ' labels'))
-                except VisdomExceptionBase:
-                    self.create_visdom_connections()
+                    try:
+                        self.vis.images(images, ncols, 2, self.display_id + 1 + i,
+                                        None, dict(title=title[:-1]))
+                    except VisdomExceptionBase:
+                        self.create_visdom_connections()
+                # try:
+                #     label_html = '<table>%s</table>' % label_html
+                #     self.vis.text(table_css + label_html, win=self.display_id + i + 2,
+                #                   opts=dict(title=title + ' labels'))
+                # except VisdomExceptionBase:
+                #         self.create_visdom_connections()
 
             else:     # show each image in a separate visdom panel;
                 idx = 1
@@ -185,11 +212,11 @@ class Visualizer():
                 except VisdomExceptionBase:
                     self.create_visdom_connections()
 
-        if self.use_html and (save_result or not self.saved):  # save images to an HTML file if they haven't been saved.
+        if self.use_html and (save_result and not self.saved):  # save images to an HTML file if they haven't been saved.
             self.saved = True
             # save images to the disk
             for label, image in visuals.items():
-                image_numpy = util.tensor2im(image)
+                image_numpy = util.tensor2im(image[-1])
                 img_path = os.path.join(self.img_dir, 'epoch%.3d_%s.png' % (epoch, label))
                 util.save_image(image_numpy, img_path)
 
@@ -280,7 +307,7 @@ class Visualizer():
         with open(self.log_name, "a") as log_file:
             log_file.write('%s\n' % message)  # save the message
 
-    def plot_current_validation_losses(self, epoch, loss):
+    def plot_current_validation_losses(self, epoch: int=None, loss: dict=None):
         """display the current validation losses on visdom display: dictionary of error labels and values
 
         Parameters:
@@ -292,19 +319,20 @@ class Visualizer():
         plot_name = 'validation_loss'
 
         if plot_name not in self.plot_data:
-            self.plot_data[plot_name] = {'X': [], 'Y': [], 'legend': ['validation loss']}
+            self.plot_data[plot_name] = {'X': [], 'Y': [], 'legend': list(loss.keys())}
 
         plot_data = self.plot_data[plot_name]
         plot_id = list(self.plot_data.keys()).index('validation_loss')
 
-        plot_data['X'].append(epoch*1.)
-        plot_data['Y'].append(loss)
+        if epoch is not None:
+            plot_data['X'].append(epoch*1.)
+            plot_data['Y'].append(list(loss.values()))
         plt.figure(1)
         plt.plot(plot_data['X'], plot_data['Y'])
         plt.legend(plot_data['legend'])
         plt.title(self.opt.name)
         plt.xlabel('epoch')
-        plt.ylabel('L1 loss')
+        plt.ylabel('validation loss')
         plt.savefig(self.val_plot_name, format='png', bbox_inches='tight')
         plt.cla()
         try:
@@ -332,6 +360,8 @@ class Visualizer():
         return message2
 
     def print_validation_loss(self, epoch, loss):
-        message = 'Validation loss epoch %d: %.3f'%(epoch, loss)
+        message = f'(epoch: {epoch}) '
+        for k,v in loss.items():
+            message += '%s: %.3f ' % (k, v)
         with open(self.val_loss_log_name, "a") as log_file:
             log_file.write('%s\n' % message)  # save the message

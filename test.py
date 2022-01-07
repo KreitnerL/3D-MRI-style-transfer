@@ -32,8 +32,7 @@ from data import create_dataset
 from models import create_model
 from util.visualizer import save_3D_images, save_images
 from util import html
-import util.util as util
-
+from tqdm import tqdm
 
 if __name__ == '__main__':
     opt = TestOptions().parse()  # get test options
@@ -51,7 +50,7 @@ if __name__ == '__main__':
     print('creating web directory', web_dir)
     webpage = html.HTML(web_dir, 'Experiment = %s, Phase = %s, Epoch = %s' % (opt.name, opt.phase, opt.epoch))
 
-    for i, data in enumerate(dataset):
+    for i, data in enumerate(tqdm(dataset, total=opt.num_test, desc='Testing')):
         if i == 0:
             model.data_dependent_initialize(data)
             model.setup(opt)               # regular setup: load and print networks; create schedulers
@@ -64,9 +63,7 @@ if __name__ == '__main__':
         model.test()           # run inference
         visuals = model.get_current_visuals()  # get image results
         img_path = model.get_image_paths()     # get image paths
-        if i % 5 == 0:  # save images to an HTML file
-            print('processing (%04d)-th image... %s' % (i, img_path))
         save_images(webpage, visuals, img_path, width=opt.display_winsize)
         if (data['A'].dim() == 5):
-            save_3D_images(webpage, model.get_current_visuals(slice=False), img_path)
+            save_3D_images(webpage, model.get_current_visuals(slice=False), img_path, data['affine'][0].cpu().numpy(), data['axis_code'][0])
     webpage.save()  # save the HTML

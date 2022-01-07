@@ -36,7 +36,7 @@ class CUTModel(BaseModel):
                             type=util.str2bool, nargs='?', const=True, default=False,
                             help="Enforce flip-equivariance as additional regularization. It's used by FastCUT, but not CUT")
 
-        parser.set_defaults(pool_size=0)  # no image pooling
+        parser.set_defaults(pool_size=0, paired=False)  # no image pooling
 
         opt, _ = parser.parse_known_args()
 
@@ -144,32 +144,17 @@ class CUTModel(BaseModel):
             # Updates the scale for next iteration
         self.scaler.update()
 
-    def set_input(self, input):
-        """Unpack input data from the dataloader and perform necessary pre-processing steps.
-        Parameters:
-            input (dict): include the data itself and its metadata information.
-        The option 'direction' can be used to swap domain A and domain B.
-        """
-        AtoB = self.opt.direction == 'AtoB'
-        self.real_A = input['A' if AtoB else 'B'].to(self.device)
-        self.real_B = input['B' if AtoB else 'A'].to(self.device)
-        self.image_paths = input['A_paths' if AtoB else 'B_paths']
-
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         real_A_in = self.real_A
         if self.opt.nce_idt and self.opt.isTrain:
             real_B_in = self.real_B
-        if self.opt.flip_equivariance:
-            self.flipped_for_equivariance = self.opt.isTrain and (np.random.random() < 0.5)
-            if self.flipped_for_equivariance:
-                real_A_in = torch.flip(self.real_A, [3])
-                if self.opt.nce_idt and self.opt.isTrain:
-                    real_B_in = torch.flip(self.real_B, [3])
         if self.opt.lambda_NCE and self.opt.phase == 'train':
             self.fake_B, self.real_A_feats = self.netG(real_A_in, self.nce_layers)
         else:
             self.fake_B = self.netG(real_A_in)
+        if self.registration_artifacts_idx is not None:
+            self.fake_B = self.fake_B * self.registration_artifacts_idx.to(self.fake_B.device)
         if self.opt.lambda_NCE and self.opt.nce_idt and self.opt.isTrain:
             self.idt_B, self.real_B_feats = self.netG(real_B_in, self.nce_layers)
 
@@ -198,11 +183,13 @@ class CUTModel(BaseModel):
 
         if self.opt.lambda_NCE > 0.0:
             self.loss_NCE = self.calculate_NCE_loss(self.real_A_feats, self.fake_B)
+            self.real_A_feats = None
         else:
             self.loss_NCE, self.loss_NCE_bd = 0.0, 0.0
 
         if self.opt.nce_idt and self.opt.lambda_NCE > 0.0:
             self.loss_NCE_Y = self.calculate_NCE_loss(self.real_B_feats, self.idt_B)
+            self.real_B_feats = None
             loss_NCE_both = (self.loss_NCE + self.loss_NCE_Y) * 0.5
         else:
             loss_NCE_both = self.loss_NCE
@@ -213,9 +200,6 @@ class CUTModel(BaseModel):
     def calculate_NCE_loss(self, feat_k, tgt):
         n_layers = len(self.nce_layers)
         feat_q = self.netG(tgt, self.nce_layers, encode_only=True)
-
-        if self.opt.flip_equivariance and self.flipped_for_equivariance:
-            feat_q = [torch.flip(fq, [3]) for fq in feat_q]
 
         # feat_k = self.netG(src, self.nce_layers, encode_only=True)
         feat_k_pool, sample_ids = self.netF(feat_k, self.opt.num_patches, None)

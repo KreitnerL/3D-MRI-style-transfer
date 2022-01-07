@@ -4,6 +4,7 @@ from tqdm import tqdm
 from options.train_options import TrainOptions
 from data import create_dataset
 from models import create_model
+from util.ssim import SSIM
 from util.visualizer import Visualizer
 import numpy as np
 
@@ -14,7 +15,8 @@ if __name__ == '__main__':
     dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
     dataset_size = len(dataset)    # get the number of images in the dataset.
     opt.dataset_size = dataset_size
-    opt.print_freq = dataset_size // opt.print_freq
+    opt.print_freq = dataset_size // opt.batch_size // opt.print_freq
+    opt.display_freq = dataset_size // opt.batch_size // opt.display_freq
 
     opt.phase='test'
     test_dataset = create_dataset(opt)
@@ -28,6 +30,7 @@ if __name__ == '__main__':
     opt.visualizer = visualizer
     total_iters = 0                # the total number of training iterations
     validation_loss_fun = torch.nn.L1Loss()
+    validation_loss_fun2 = SSIM()
 
     optimize_time = 0.1
 
@@ -36,7 +39,7 @@ if __name__ == '__main__':
         epoch_start_time = time.time()  # timer for entire epoch
         iter_data_time = time.time()    # timer for data loading per iteration
         epoch_iter = 0                  # the number of training iterations in current epoch, reset to 0 every epoch
-        # visualizer.reset()              # reset the visualizer: make sure it saves the results to HTML at least once every epoch
+        visualizer.reset()              # reset the visualizer: make sure it saves the results to HTML at least once every epoch
 
         dataset.set_epoch(epoch)
         pbar = tqdm(dataset, total=int(len(dataset) / opt.batch_size))
@@ -77,9 +80,9 @@ if __name__ == '__main__':
                 model.test()
                 opt.phase='train'
                 opt.serial_batches, opt.paired = tmp
-                save_result = total_iters % opt.update_html_freq == 0
+                save_result = epoch % opt.update_html_freq == 0
                 visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
-                del test_data
+                test_data = None
 
             if total_iters % opt.print_freq == 0:    # print training losses and save logging information to the disk
                 losses = model.get_current_losses()
@@ -97,6 +100,7 @@ if __name__ == '__main__':
             torch.cuda.empty_cache()
 
         validation_loss_array = []
+        validation_loss_array2 = []
         opt.phase='test'
         tmp = opt.serial_batches, opt.paired
         opt.serial_batches=True
@@ -110,8 +114,9 @@ if __name__ == '__main__':
             model.set_input(test_data)
             model.test()
             validation_loss_array.append(validation_loss_fun(model.fake_B, model.real_B).item())
+            validation_loss_array2.append(1 - validation_loss_fun2(model.fake_B, model.real_B).item())
         
-        val_loss = np.mean(validation_loss_array)
+        val_loss = {'L1': np.mean(validation_loss_array), '1-SSIM': np.mean(validation_loss_array2)}
         visualizer.print_validation_loss(epoch, val_loss)
         visualizer.plot_current_validation_losses(epoch, val_loss)
         opt.phase='train'

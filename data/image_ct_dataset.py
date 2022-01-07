@@ -1,3 +1,4 @@
+from data.data_augmentation_3D import ColorJitterSphere3D
 from data.image_folder import get_custom_file_paths, natural_sort
 from data.base_dataset import BaseDataset
 from PIL import Image
@@ -22,7 +23,8 @@ class ImageCTDataset(BaseDataset):
         self.transformations = [
             transforms.ToTensor(),
             transforms.Lambda(lambda x: x.type(torch.float16 if opt.amp else torch.float32)),
-            PadIfNecessary(opt.n_downsampling),
+            SpatialRotation([(1,2)]),
+            PadIfNecessary(3),
         ]
 
         if(opt.phase == 'train'):
@@ -30,9 +32,8 @@ class ImageCTDataset(BaseDataset):
                 SpatialRotation([(1,2)], [0,1,2,3], auto_update=False),
                 SpatialFlip(dims=(1,2), auto_update=False),
             ]
-        else:
-            self.transformations += [SpatialRotation([(1,2)])]
         self.transform = transforms.Compose(self.transformations)
+        self.colorJitter = ColorJitterSphere3D((0.3, 1.5), (0.3,1.5), sigma=0.5, dims=2)
 
     def center(self, x, mean, std):
         return (x - mean) / std
@@ -59,6 +60,8 @@ class ImageCTDataset(BaseDataset):
         else:
             A = self.transform(A_img)
             B = self.transform(B_img)
+        if self.opt.direction=='AtoB':
+            A = self.colorJitter(A)
         return {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path}
 
     def __len__(self):

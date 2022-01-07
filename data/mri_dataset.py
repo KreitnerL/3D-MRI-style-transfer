@@ -1,88 +1,49 @@
 from data.image_folder import get_custom_file_paths, natural_sort
 from data.base_dataset import BaseDataset
+from data.data_augmentation_3D import PadIfNecessary, SpatialFlip, SpatialRotation, ColorJitterSphere3D, getBetterOrientation
 import nibabel as nib
 import random
 from torchvision import transforms
-from skimage.transform import resize
 import os
 import numpy as np
 import torch
-import torch.nn.functional as F
-from collections.abc import Sequence
 from models.networks import setDimensions
-
-class SpatialRotation():
-    def __init__(self, dimensions: Sequence, k: Sequence = [1], auto_update=True):
-        self.dimensions = dimensions
-        self.k = k
-        self.args = None
-        self.auto_update = auto_update
-        self.update()
-
-    def update(self):
-        self.args = (random.choice(self.k), random.choice(self.dimensions))
-
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        if self.auto_update:
-            self.update()
-        x = torch.rot90(x, *self.args)
-        return x
-
-class SpatialFlip():
-    def __init__(self, dims: Sequence, auto_update=True) -> None:
-        self.dims = dims
-        self.args = None
-        self.auto_update = auto_update
-        self.update()
-
-    def update(self):
-        self.args = tuple(random.sample(self.dims, random.choice(range(len(self.dims)))))
-
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        if self.auto_update:
-            self.update()
-        x = torch.flip(x, self.args)
-        return x
-
-class PadIfNecessary():
-    def __init__(self, n_downsampling: int):
-        self.n_downsampling = n_downsampling
-        self.mod = 2**self.n_downsampling
-
-    def __call__(self, x):
-        padding = []
-        for dim in reversed(x.shape[1:]):
-            padding.extend([0, (self.mod - dim%self.mod)%self.mod])
-        x = F.pad(x, padding)
-        return x
 
 class MRIDataset(BaseDataset):
     def __init__(self, opt):
         super().__init__(opt)
-        self.A_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, opt.phase + 'T1'), 't1.nii.gz'))
-        self.B_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, opt.phase + 'T2'), 't2.nii.gz'))
-        self.A_size = len(self.A_paths)  # get the size of dataset A
-        self.B_size = len(self.B_paths)  # get the size of dataset B
+        self.mri_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 'mri', opt.phase), '.nii.gz'))
+        self.ct_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 'ct', opt.phase), '.nii.gz'))
+        self.surpress_registration_artifacts = True
+        self.mri_size = len(self.mri_paths)  # get the size of dataset A
+        self.ct_size = len(self.ct_paths)  # get the size of dataset B
         setDimensions(3, opt.bayesian)
+        opt.no_antialias = True
+        opt.no_antialias_up = True
 
-        self.transformations = [
-            transforms.Lambda(lambda x: x[:,48:240,80:240,36:260]), # 192x160x224
-            transforms.Lambda(lambda x: resize(x, (x.shape[0],96,80,112), order=1, anti_aliasing=True)),
+        if opt.direction == 'AtoB':
+            opt.AtoB = True
+            opt.BtoA = False
+        else:
+            opt.AtoB = False
+            opt.BtoA = True
+
+        transformations = [
             transforms.Lambda(lambda x: self.toGrayScale(x)),
             transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float16 if opt.amp else torch.float32)),
             PadIfNecessary(3),
-            transforms.Lambda(lambda x: self.center(x, opt.mean, opt.std)),
-            # transforms.Lambda(lambda x: F.pad(x, (0,1,0,0,0,0), mode='constant', value=0)),
         ]
+        self.updateTransformations = []
 
         if(opt.phase == 'train'):
-            self.transformations += [
-                SpatialRotation([(1,2), (1,3), (2,3)], [0,1,2,3], auto_update=False),
-                SpatialFlip(dims=(1,2,3), auto_update=False),
+            self.updateTransformations += [
+                SpatialRotation([(1,2), (1,3), (2,3)], [*[0]*12,1,2,3], auto_update=False), # With a probability of approx. 51% no rotation is performed
+                SpatialFlip(dims=(1,2,3), auto_update=False)
             ]
-        else:
-            self.transformations += [SpatialRotation([(1,2)])]
-        self.transform = transforms.Compose(self.transformations)
+        transformations += self.updateTransformations
+        self.mri_transform = transforms.Compose(transformations)
+        self.ct_transform = transforms.Compose(transformations[1:])
+        self.colorJitter = ColorJitterSphere3D((0.3, 1.5), (0.3,1.5), sigma=0.5) # ColorJitter3D(brightness_min_max=(0.3, 1.5), contrast_min_max=(0.3, 1.5))
 
     def toGrayScale(self, x):
         x_min = np.amin(x)
@@ -94,21 +55,50 @@ class MRIDataset(BaseDataset):
         return (x - mean) / std
 
     def updateDataAugmentation(self):
-        for t in self.transformations[-2:]:
+        for t in self.updateTransformations:
             t.update()
 
     def __getitem__(self, index):
-        A_path = self.A_paths[index % self.A_size]  # make sure index is within then range
+        mri_path = self.mri_paths[index % self.mri_size]  # make sure index is within then range
+        # mri_path = self.mri_paths[102]
+        nifti: nib.Nifti1Image = nib.load(mri_path)
+        if self.opt.AtoB:
+            affine = nifti.affine
+        nifti = getBetterOrientation(nifti, "IPL")
+        mri_img = np.array(nifti.get_fdata())
+
         if self.opt.paired:   # make sure index is within then range
-            index_B = index % self.B_size
-        else:   # randomize the index for domain B to avoid fixed pairs.
-            index_B = random.randint(0, self.B_size - 1)
-        B_path = self.B_paths[index_B]
-        A_img = np.array(nib.load(A_path).get_fdata())
-        B_img = np.array(nib.load(B_path).get_fdata())
-        A = self.transform(A_img[np.newaxis, ...])
-        B = self.transform(B_img[np.newaxis, ...])
-        return {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path}
+            index_ct = index % self.ct_size
+        else:
+            index_ct = random.randint(0, self.ct_size - 1)
+            # index_B = 3
+        ct_path = self.ct_paths[index_ct]
+        nifti: nib.Nifti1Image = nib.load(ct_path)
+        if self.opt.BtoA:
+            affine = nifti.affine
+        nifti = getBetterOrientation(nifti, "IPL")
+        ct_img = np.array(nifti.get_fdata())
+        if self.surpress_registration_artifacts:
+            if self.opt.paired or self.opt.BtoA:
+                registration_artifacts_idx = ct_img==0
+            else:
+                registration_artifacts_idx = np.array(getBetterOrientation(nib.load(self.ct_paths[index % self.ct_size]), "IPL").get_fdata()) == 0
+            if self.opt.BtoA:
+                mri_img[np.array(getBetterOrientation(nib.load(self.ct_paths[index % self.ct_size]), "IPL").get_fdata()) == 0] = np.min(mri_img)
+                registration_artifacts_idx = self.ct_transform(1- registration_artifacts_idx[np.newaxis, ...]*1.)
+            else:
+                registration_artifacts_idx = self.mri_transform(1- registration_artifacts_idx[np.newaxis, ...]*1.)
+            ct_img[ct_img==0] = np.min(ct_img)
+        mri = self.mri_transform(mri_img[np.newaxis, ...])
+        if(self.opt.phase == 'train') and self.opt.AtoB:
+            mri = self.colorJitter(mri)
+        ct_img = (np.clip(ct_img, -1000., 1000.) + 1000.) / 2000.
+        ct = self.ct_transform(ct_img[np.newaxis, ...])
+
+        data = {'A': mri, 'B': ct, 'affine': affine, 'axis_code': "IPL", 'A_paths': mri_path, 'B_paths': ct_path}
+        if self.surpress_registration_artifacts:
+            data['registration_artifacts_idx'] = registration_artifacts_idx
+        return data
 
     def __len__(self):
         """Return the total number of images in the dataset.
@@ -116,6 +106,6 @@ class MRIDataset(BaseDataset):
         As we have two datasets with potentially different number of images,
         we take a maximum of
         """
-        return max(self.A_size, self.B_size)
+        return max(self.mri_size, self.ct_size)
         
         

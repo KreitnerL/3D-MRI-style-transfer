@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import re
 import matplotlib as mpl
 
-def colorFader(mix: float, c1='g',c2='r'): #fade (linear interpolate) from color c1 (at mix=0) to c2 (mix=1)
+def colorFader(mix: float, c1='k',c2='r'): #fade (linear interpolate) from color c1 (at mix=0) to c2 (mix=1)
     """
     Given a float number in the range [0,1], returns a interpolated gradient rgb color of the color c1 and c2
     https://stackoverflow.com/a/50784012
@@ -21,6 +21,16 @@ def colorFader(mix: float, c1='g',c2='r'): #fade (linear interpolate) from color
     c1=np.array(mpl.colors.to_rgb(c1))
     c2=np.array(mpl.colors.to_rgb(c2))
     return (1-mix)*c1 + mix*c2
+
+def colorFaderTensor(mix: torch.Tensor, c1='k',c2='r'): #fade (linear interpolate) from color c1 (at mix=0) to c2 (mix=1)
+    """
+    Given a float number in the range [0,1], returns a interpolated gradient rgb color of the color c1 and c2
+    https://stackoverflow.com/a/50784012
+    """
+    c1=torch.tensor(mpl.colors.to_rgb(c1))
+    c2=torch.tensor(mpl.colors.to_rgb(c2))
+    mix = torch.stack([(1-mix)*c1[i] + mix*c2[i] for i in range(3)], dim=-1)
+    return mix
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -69,7 +79,7 @@ def tensor2im(input_image, imtype=np.uint8):
         if image_numpy.shape[0] == 1:  # grayscale to RGB
             image_numpy = np.tile(image_numpy, (3, 1, 1))
         image_numpy = np.transpose(image_numpy, (1, 2, 0))  * 255  # post-processing: tranpose and scaling
-        input_image = torch.clamp(input_image, 0, 255)
+        input_image = torch.clamp(input_image.type(torch.float32), 0, 255)
     else:  # if it is a numpy array, do nothing
         image_numpy = input_image
     return image_numpy.astype(imtype)
@@ -113,11 +123,20 @@ def save_image(image_numpy, image_path, aspect_ratio=1.0):
         image_pil = image_pil.resize((int(h / aspect_ratio), w), Image.BICUBIC)
     image_pil.save(image_path)
 
-def save_nifti_image(image_tensor: torch.Tensor, image_path):
+def save_nifti_image(image_tensor: torch.Tensor, image_path: str, affine: np.ndarray, axis_code: str):
     """
     Save a MRI numpy image to the disk. Resize the image by a scaling factor and enforce an aspect ratio of 1
     """
-    new_img = nib.Nifti1Image(image_tensor.long().detach().cpu().numpy()[0,0,:,:,:], np.eye(4))
+    image_tensor = image_tensor.detach().cpu().numpy()[0,0].astype(np.uint8)
+    if len(image_tensor.shape)==4:
+        shape_3d = image_tensor.shape[0:3]
+        rgb_dtype = np.dtype([('R', 'u1'), ('G', 'u1'), ('B', 'u1')])
+        image_tensor = image_tensor.copy().view(dtype=rgb_dtype).reshape(shape_3d)  # copy used
+    new_img = nib.Nifti1Image(image_tensor, np.eye(4))
+    orig_ornt = nib.io_orientation(affine)
+    transform = nib.orientations.ornt_transform(nib.orientations.axcodes2ornt(axis_code), orig_ornt)
+    new_img =  new_img.as_reoriented(transform)
+    new_img = nib.Nifti1Image(new_img.get_fdata(), affine)
     nib.save(new_img, image_path)
 
 
@@ -187,14 +206,19 @@ def correct_resize(t, size, mode=Image.BICUBIC):
 
 def load_val_log(path: str):
     val = []
+    legend = None
     with open(path) as f:
         lines = [line.rstrip() for line in f]
     for line in lines:
         if line.startswith('='):
             val = []
             continue
-        val.append(float(line.split(': ')[-1]))
-    return val
+        line = line.split(') ')[-1]
+        ls = line.split(', ')
+        val.append([float(l.split(': ')[-1]) for l in ls])
+        if legend is None:
+            legend = [l.split(': ')[0] for l in ls]
+    return val, legend
 
 def val_log_2_png(path: str):
     folder_path = os.path.dirname(path)
