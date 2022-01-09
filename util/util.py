@@ -251,6 +251,7 @@ def load_loss_log(path: str, dataset_size=0):
             legend = []
             y = []
             x = []
+            has_legend=False
             continue
         meta_data = re.sub('\(|\)|\:|\,', '', re.search('\(.*\)', line).group(0)).split()
         x_i = (int(meta_data[1]) + int(meta_data[3])/dataset_size)-1
@@ -262,9 +263,9 @@ def load_loss_log(path: str, dataset_size=0):
             except ValueError:
                 if not has_legend and len(t)>1:
                     legend.append(t.replace(':', ''))
+        has_legend=True
         y.append(y_i)
         x.append(x_i)
-        has_legend=True
     return x, y, legend
 
 def loss_log_2_png(path: str, dataset_size=234):

@@ -33,7 +33,7 @@ class Pix2PixModel(BaseModel):
         if is_train:
             parser.set_defaults(pool_size=0, gan_mode='lsgan', paired=True)
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
-            parser.add_argument('--lambda_perceptual', type=float, default=0.2, help="weight for perceptual loss")
+        parser.add_argument('--lambda_perceptual', type=float, default=0.2, help="weight for perceptual loss")
 
         return parser
 
@@ -111,8 +111,9 @@ class Pix2PixModel(BaseModel):
                 feats_real = self.netD(torch.cat((self.real_A, self.real_B), 1).detach(), layers=[0, 3, 6, 9], encode_only=True)
                 for i, λ_i in enumerate([5, 1.5, 1.5, 1]):
                     self.loss_G_perceptual += λ_i * self.perceptual_loss(feats_fake[i], feats_real[i])
+                self.loss_G_perceptual*=self.opt.lambda_perceptual
             # combine loss and calculate gradients
-            self.loss_G = self.loss_G_GAN + self.loss_G_L1 + self.loss_G_perceptual*self.opt.lambda_perceptual
+            self.loss_G = self.loss_G_GAN + self.loss_G_L1 + self.loss_G_perceptual
         self.scaler.scale(self.loss_G).backward()
 
     def optimize_parameters(self):

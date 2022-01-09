@@ -123,6 +123,7 @@ class BaseModel(ABC):
             val_data = (list(range(len(y))), y, legend)
             v: Visualizer = opt.visualizer
             v.set_plot_data(loss_data, val_data)
+            v.plot_current_losses(legend=loss_data[-1])
             v.plot_current_validation_losses()
 
         self.print_networks(opt.verbose)
@@ -192,7 +193,7 @@ class BaseModel(ABC):
                 if tmp.dim() == 5:
                     # For 3D data, take a slice along the z-axis
                     if slice:
-                        visual_ret[name] = [tmp[:,0:1,:,:,tmp.shape[-1]//2], tmp[:,0:1,:,tmp.shape[-2]//2,:], tmp[:,0:1,tmp.shape[-3]//2,:,:]]
+                        visual_ret[name] = [tmp[:,0:1,tmp.shape[-3]//2,:,:], tmp[:,0:1,:,tmp.shape[-2]//2,:], tmp[:,0:1,:,:,tmp.shape[-1]//2]]
                     else:
                         visual_ret[name] = [tmp]
         if self.opt.bayesian:

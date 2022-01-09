@@ -246,7 +246,7 @@ class Visualizer():
         self.plot_data[plot_name] = {'X': x, 'Y': y, 'legend': legend}
 
 
-    def plot_current_losses(self, epoch, counter_ratio, losses):
+    def plot_current_losses(self, epoch=None, counter_ratio=None, losses=None, legend=None):
         """display the current losses on visdom display: dictionary of error labels and values
 
         Parameters:
@@ -254,19 +254,19 @@ class Visualizer():
             counter_ratio (float) -- progress (percentage) in the current epoch, between 0 to 1
             losses (OrderedDict)  -- training losses stored in the format of (name, float) pairs
         """
-        if len(losses) == 0:
-            return
-
-        plot_name = '_'.join(list(losses.keys()))
+        if legend is None:
+            plot_name = '_'.join(list(losses.keys()))
+        else:
+            plot_name = '_'.join(legend)
 
         if plot_name not in self.plot_data:
             self.plot_data[plot_name] = {'X': [], 'Y': [], 'legend': list(losses.keys())}
 
         plot_data = self.plot_data[plot_name]
         plot_id = list(self.plot_data.keys()).index(plot_name)
-
-        plot_data['X'].append(epoch + counter_ratio)
-        plot_data['Y'].append([losses[k] for k in plot_data['legend']])
+        if epoch is not None:
+            plot_data['X'].append(epoch + counter_ratio)
+            plot_data['Y'].append([losses[k] for k in plot_data['legend']])
         plt.figure(0)
         plt.plot(plot_data['X'], plot_data['Y'])
         plt.legend(plot_data['legend'])
@@ -362,6 +362,6 @@ class Visualizer():
     def print_validation_loss(self, epoch, loss):
         message = f'(epoch: {epoch}) '
         for k,v in loss.items():
-            message += '%s: %.3f ' % (k, v)
+            message += '%s: %.3f, ' % (k, v)
         with open(self.val_loss_log_name, "a") as log_file:
-            log_file.write('%s\n' % message)  # save the message
+            log_file.write('%s\n' % message[:-2])  # save the message

@@ -135,7 +135,7 @@ class ColorJitterSphere3D():
             x = (brightness * x).float().clamp(0, 1.).to(x.dtype)
         if self.contrast_min_max:
             contrast = (self.contrast - 1) * jitterSphere + 1
-            mean = torch.mean(x.float(), keepdim=True)
+            mean =x.float().mean()
             x = (contrast * x + (1.0 - self.contrast) * mean).float().clamp(0, 1.).to(x.dtype)
         return x
 
