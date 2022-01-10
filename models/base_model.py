@@ -200,7 +200,7 @@ class BaseModel(ABC):
             std_map: torch.Tensor = self.std_map[0:1,0:1]
             if std_map.dim() == 5 and slice:
                 std_maps = []
-                for i in range(4,1,-1):
+                for i in range(2,5):
                     std_map_i = std_map.select(i, std_map.shape[i]//2).clone()
                     shape = std_map_i.shape
                     std_map_i -= std_map_i.min()
