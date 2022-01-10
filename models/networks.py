@@ -1738,7 +1738,13 @@ class SIT(nn.Module):
         # Downsample
         r_in = []
         for l_i_in in self.layers_in:
-            input = l_i_in(input)
+            input = l_i_in[:-2](input)
+            if layer_id in layers:
+                feats.append(input)
+                if encode_only and layer_id == layers[-1]:
+                    return feats
+            layer_id += 1
+            input = l_i_in[-2:](input)
             r_in.append(input)
 
         # Upsample
@@ -1746,19 +1752,15 @@ class SIT(nn.Module):
         for i in range(self.factor-1, 0, -1):
             l_i = self.layers[i-1]
             r = r_in.pop()
-            if layer_id in layers:
-                feats.append(r)
-                if encode_only and layer_id == layers[-1]:
-                    return feats
             if r_out is not None:
                 r = torch.concat([r, r_out], dim=1)
-            layer_id+=1
-            r = l_i(r)
+            r = l_i[:-2](r)
             if layer_id in layers:
                 feats.append(r)
                 if encode_only and layer_id == layers[-1]:
                     return feats
             layer_id += 1
+            r = l_i[-2:](r)
             r_out = r
             r = None
         r_out = self.out(r_out)

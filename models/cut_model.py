@@ -148,7 +148,7 @@ class CUTModel(BaseModel):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         real_A_in = self.real_A
         if self.opt.nce_idt and self.opt.isTrain:
-            real_B_in = self.real_B
+            real_B_in = self.real_B.expand([*self.real_A.shape[:2], *self.real_B.shape[2:]])
         if self.opt.lambda_NCE and self.opt.phase == 'train':
             self.fake_B, self.real_A_feats = self.netG(real_A_in, self.nce_layers)
         else:
@@ -182,13 +182,13 @@ class CUTModel(BaseModel):
             self.loss_G_GAN = 0.0
 
         if self.opt.lambda_NCE > 0.0:
-            self.loss_NCE = self.calculate_NCE_loss(self.real_A_feats, self.fake_B)
+            self.loss_NCE = self.calculate_NCE_loss(self.real_A_feats, self.fake_B.expand(self.real_A.shape))
             self.real_A_feats = None
         else:
             self.loss_NCE, self.loss_NCE_bd = 0.0, 0.0
 
         if self.opt.nce_idt and self.opt.lambda_NCE > 0.0:
-            self.loss_NCE_Y = self.calculate_NCE_loss(self.real_B_feats, self.idt_B)
+            self.loss_NCE_Y = self.calculate_NCE_loss(self.real_B_feats, self.idt_B.expand([*self.real_A.shape[:2], *self.real_B.shape[2:]]))
             self.real_B_feats = None
             loss_NCE_both = (self.loss_NCE + self.loss_NCE_Y) * 0.5
         else:
