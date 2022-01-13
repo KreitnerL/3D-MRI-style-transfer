@@ -29,7 +29,7 @@ class ImageCTDataset(BaseDataset):
 
         if(opt.phase == 'train'):
             self.transformations += [
-                SpatialRotation([(1,2)], [0,1,2,3], auto_update=False),
+                SpatialRotation([(1,2)], [*[0]*3,1,2,3], auto_update=False),
                 SpatialFlip(dims=(1,2), auto_update=False),
             ]
         self.transform = transforms.Compose(self.transformations)
