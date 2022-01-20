@@ -198,12 +198,8 @@ class BaseModel(ABC):
                     # For 3D data, take a slice along the z-axis
                             else:
                                 visual_ret[name+f'_{i}'] = [tmp[:,i:i+1]]
-                    else:
-                        if slice:
-                            visual_ret[name] = [tmp[:,:,tmp.shape[-3]//2,:,:], tmp[:,:,:,tmp.shape[-2]//2,:], tmp[:,:,:,:,tmp.shape[-1]//2]]
-                        # For 3D data, take a slice along the z-axis
-                        else:
-                            visual_ret[name] = [tmp[:,:]]
+                else:
+                    visual_ret[name] = [tmp[:,:]]
             else:
                 if len(tmp[0])>1:
                     for i in range(len(tmp[0])):
