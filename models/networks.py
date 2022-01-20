@@ -1687,7 +1687,7 @@ class SIT(nn.Module):
         self.weightedSum = nn.ModuleList([])
         for i in range(1, factor):
             self.layers_in.add_module(str(i-1), nn.Sequential(
-                conv(C_in if i==1 else C_mid , C_mid, kernel_size=3, stride=2, padding=1),
+                conv(C_in if i==1 else C_mid , C_mid, kernel_size=4, stride=2, padding=1),
                 norm_layer(C_mid),
                 nn.ReLU(True)
             ))

@@ -116,9 +116,8 @@ class ColorJitterSphere3D():
             self.contrast = float(torch.empty(1).uniform_(self.contrast_min_max[0], self.contrast_min_max[1]))
         self.ranges = []
         for _ in range(self.dims):
-            start = torch.rand(1).item() * 10 - 5
-            end = torch.rand(1).item() * ( 5 - start) + start
-            self.ranges.append((start, end))
+            r = torch.rand(2) * 10 - 5
+            self.ranges.append((r.min().item(), r.max().item()))
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
         self.update()

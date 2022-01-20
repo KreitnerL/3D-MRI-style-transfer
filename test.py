@@ -64,6 +64,6 @@ if __name__ == '__main__':
         visuals = model.get_current_visuals()  # get image results
         img_path = model.get_image_paths()     # get image paths
         save_images(webpage, visuals, img_path, width=opt.display_winsize)
-        if (data['A'].dim() == 5):
+        if data['A'].dim() == 5 and not opt.no_nifti:
             save_3D_images(webpage, model.get_current_visuals(slice=False), img_path, data['affine'][0].cpu().numpy(), data['axis_code'][0])
     webpage.save()  # save the HTML
