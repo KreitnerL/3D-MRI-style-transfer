@@ -9,22 +9,25 @@ import numpy as np
 from data.data_augmentation_3D import PadIfNecessary, SpatialFlip, SpatialRotation, ColorJitterSphere3D, toGrayScale
 from models.networks import setDimensions
 
-class ImageCTDataset(BaseDataset):
+class Brain2DDataset(BaseDataset):
     def __init__(self, opt):
         super().__init__(opt)
         setDimensions(2, opt.bayesian)
         
-        self.A_paths = natural_sort(get_custom_file_paths(os.path.join(self.opt.dataroot, 'ct', self.opt.phase), '.png'))
-        self.B_paths = natural_sort(get_custom_file_paths(os.path.join(self.opt.dataroot, 'mri', self.opt.phase), '.png'))
-        self.A_size = len(self.A_paths)  # get the size of dataset A
+        self.A1_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 't1', opt.phase), '.png'))
+        self.A2_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 'flair', opt.phase), '.png'))
+        self.B_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 'dir', opt.phase), '.png'))
+        self.A_size = len(self.A1_paths)  # get the size of dataset A
         self.B_size = len(self.B_paths)  # get the size of dataset B
-        self.surpress_registration_artifacts = True
+        setDimensions(2, opt.bayesian)
+        opt.input_nc = 2
+        opt.output_nc = 1
 
         self.transformations = [
             transforms.Lambda(lambda x: toGrayScale(x)),
             transforms.ToTensor(),
             transforms.Lambda(lambda x: x.type(torch.float16 if opt.amp else torch.float32)),
-            SpatialRotation([(1,2)]),
+            # SpatialRotation([(1,2)]),
             PadIfNecessary(3),
         ]
 
@@ -37,41 +40,26 @@ class ImageCTDataset(BaseDataset):
         self.transform = transforms.Compose(self.transformations)
         self.colorJitter = ColorJitterSphere3D((0.3, 1.5), (0.3,1.5), sigma=0.5, dims=2)
 
-    def center(self, x, mean, std):
-        return (x - mean) / std
-
     def __getitem__(self, index):
-        A_path = self.A_paths[index % self.A_size]  # make sure index is within then range
+        A1_path = self.A1_paths[index % self.A_size]  # make sure index is within then range
+        A2_path = self.A2_paths[index % self.A_size]  # make sure index is within then range
         if self.opt.paired:   # make sure index is within then range
             index_B = index % self.B_size
         else:   # randomize the index for domain B to avoid fixed pairs.
             index_B = random.randint(0, self.B_size - 1)
         B_path = self.B_paths[index_B]
-        A_img = np.array(Image.open(A_path), dtype=np.float32)
+        A1_img = np.array(Image.open(A1_path), dtype=np.float32)
+        A2_img = np.array(Image.open(A2_path), dtype=np.float32)
         B_img = np.array(Image.open(B_path), dtype=np.float32)
 
-        if self.surpress_registration_artifacts:
-            if self.opt.paired or self.opt.direction=="BtoA":
-                registration_artifacts_idx = B_img==127
-            else:
-                registration_artifacts_idx = np.array(Image.open(self.B_paths[index % self.B_size]), dtype=np.float32) == 127
-            registration_artifacts_idx = self.transform(1- registration_artifacts_idx*1.)
-            B_img[B_img==127] = 0
-
-        if self.opt.paired:
-            AB_img = np.stack([A_img,B_img], -1)
-            AB = self.transform(AB_img)
-            A = AB[0:1]
-            B = AB[1:2]
-        else:
-            A = self.transform(A_img)
-            B = self.transform(B_img)
+        A1 = self.transform(A1_img)
+        A2 = self.transform(A2_img)
+        B = self.transform(B_img)
         if self.opt.phase == 'train' and self.opt.direction=='AtoB':
-            A = self.colorJitter(A)
-        data = {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path}
-        if self.surpress_registration_artifacts:
-            data['registration_artifacts_idx'] = registration_artifacts_idx
-        return data
+            A1 = self.colorJitter(A1)
+            A2 = self.colorJitter(A2, no_update=True)
+        A = torch.concat((A1, A2), dim=0)
+        return {'A': A, 'B': B, 'A_paths': A1_path, 'B_paths': B_path}
 
     def __len__(self):
         """Return the total number of images in the dataset.

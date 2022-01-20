@@ -1,3 +1,4 @@
+from data.base_dataset import BaseDataset
 from data.image_folder import get_custom_file_paths, natural_sort
 import nibabel as nib
 import random
@@ -6,10 +7,9 @@ import os
 import numpy as np
 import torch
 from models.networks import setDimensions
-from data.mri_dataset import MRIDataset
 from data.data_augmentation_3D import ColorJitter3D, PadIfNecessary, SpatialRotation, SpatialFlip, getBetterOrientation
 
-class brain3DDataset(MRIDataset):
+class brain3DDataset(BaseDataset):
     def __init__(self, opt):
         super().__init__(opt)
         self.A1_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 't1', opt.phase), 't1.nii.gz'))
@@ -30,7 +30,6 @@ class brain3DDataset(MRIDataset):
             transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float16 if opt.amp else torch.float32)),
             PadIfNecessary(3),
         ]
-        self.updateTransformations = []
 
         if(opt.phase == 'train'):
             self.updateTransformations += [
@@ -57,9 +56,10 @@ class brain3DDataset(MRIDataset):
             B_path = self.B_paths[index_B]
             B_img = nib.load(B_path)
         A1 = self.transform(A1_img)
-        A1 = self.colorJitter(A1)
         A2 = self.transform(A2_img)
-        A2 = self.colorJitter(A2)
+        if self.opt.phase == 'train':
+            A1 = self.colorJitter(A1)
+            A2 = self.colorJitter(A2, no_update=True)
         A = torch.concat((A1, A2), dim=0)
         B = self.transform(B_img)
         return {'A': A, 'B': B, 'affine': affine, 'axis_code': "IPL", 'A_paths': A1_path, 'B_paths': B_path}

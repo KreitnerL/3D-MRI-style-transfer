@@ -29,6 +29,7 @@ class BaseDataset(data.Dataset, ABC):
         self.opt = opt
         self.root = opt.dataroot
         self.current_epoch = 0
+        self.updateTransformations = []
 
     @staticmethod
     def modify_commandline_options(parser, is_train):
@@ -228,3 +229,7 @@ def __print_size_warning(ow, oh, w, h):
               "(%d, %d). This adjustment will be done to all images "
               "whose sizes are not multiples of 4" % (ow, oh, w, h))
         __print_size_warning.has_printed = True
+
+def updateDataAugmentation(self):
+    for t in self.updateTransformations:
+        t.update()

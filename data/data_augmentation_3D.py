@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from collections.abc import Sequence
 import torch
 import nibabel as nib
-
+import numpy as np
 
 class SpatialRotation():
     def __init__(self, dimensions: Sequence, k: Sequence = [3], auto_update=True):
@@ -81,8 +81,9 @@ class ColorJitter3D():
         if self.contrast_min_max:
             self.contrast = float(torch.empty(1).uniform_(self.contrast_min_max[0], self.contrast_min_max[1]))
 
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        self.update()
+    def __call__(self, x: torch.Tensor, no_update=False) -> torch.Tensor:
+        if not no_update:
+            self.update()
         if self.brightness_min_max:
             x = (self.brightness * x).float().clamp(0, 1.).to(x.dtype)
         if self.contrast_min_max:
@@ -144,3 +145,12 @@ def getBetterOrientation(nifti: nib.Nifti1Image, axisCode="IPL"):
     transform = nib.orientations.ornt_transform(orig_ornt, targ_ornt)
     nifti = nifti.as_reoriented(transform)
     return nifti
+
+def toGrayScale(x):
+    x_min = np.amin(x)
+    x_max = np.amax(x) - x_min
+    x = (x - x_min) / x_max
+    return x
+
+def center(x, mean, std):
+    return (x - mean) / std

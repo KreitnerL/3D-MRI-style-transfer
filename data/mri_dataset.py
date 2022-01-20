@@ -1,6 +1,6 @@
 from data.image_folder import get_custom_file_paths, natural_sort
 from data.base_dataset import BaseDataset
-from data.data_augmentation_3D import PadIfNecessary, SpatialFlip, SpatialRotation, ColorJitterSphere3D, getBetterOrientation
+from data.data_augmentation_3D import PadIfNecessary, SpatialFlip, SpatialRotation, ColorJitterSphere3D, getBetterOrientation, toGrayScale
 import nibabel as nib
 import random
 from torchvision import transforms
@@ -29,11 +29,10 @@ class MRIDataset(BaseDataset):
             opt.BtoA = True
 
         transformations = [
-            transforms.Lambda(lambda x: self.toGrayScale(x)),
+            transforms.Lambda(lambda x: toGrayScale(x)),
             transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float16 if opt.amp else torch.float32)),
             PadIfNecessary(3),
         ]
-        self.updateTransformations = []
 
         if(opt.phase == 'train'):
             self.updateTransformations += [
@@ -44,19 +43,6 @@ class MRIDataset(BaseDataset):
         self.mri_transform = transforms.Compose(transformations)
         self.ct_transform = transforms.Compose(transformations[1:])
         self.colorJitter = ColorJitterSphere3D((0.3, 1.5), (0.3,1.5), sigma=0.5) # ColorJitter3D(brightness_min_max=(0.3, 1.5), contrast_min_max=(0.3, 1.5))
-
-    def toGrayScale(self, x):
-        x_min = np.amin(x)
-        x_max = np.amax(x) - x_min
-        x = (x - x_min) / x_max
-        return x
-
-    def center(self, x, mean, std):
-        return (x - mean) / std
-
-    def updateDataAugmentation(self):
-        for t in self.updateTransformations:
-            t.update()
 
     def __getitem__(self, index):
         mri_path = self.mri_paths[index % self.mri_size]  # make sure index is within then range
@@ -78,7 +64,7 @@ class MRIDataset(BaseDataset):
             affine = nifti.affine
         nifti = getBetterOrientation(nifti, "IPL")
         ct_img = np.array(nifti.get_fdata())
-        if self.surpress_registration_artifacts:
+        if self.surpress_registration_artifacts and self.opt.phase == 'train':
             if self.opt.paired or self.opt.BtoA:
                 registration_artifacts_idx = ct_img==0
             else:
@@ -96,7 +82,7 @@ class MRIDataset(BaseDataset):
         ct = self.ct_transform(ct_img[np.newaxis, ...])
 
         data = {'A': mri, 'B': ct, 'affine': affine, 'axis_code': "IPL", 'A_paths': mri_path, 'B_paths': ct_path}
-        if self.surpress_registration_artifacts:
+        if self.surpress_registration_artifacts and self.opt.phase == 'train':
             data['registration_artifacts_idx'] = registration_artifacts_idx
         return data
 
