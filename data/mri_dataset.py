@@ -84,7 +84,7 @@ class MRIDataset(BaseDataset):
             else:
                 registration_artifacts_idx = np.array(getBetterOrientation(nib.load(self.ct_paths[index % self.ct_size]), "IPL").get_fdata()) == 0
             if self.opt.BtoA:
-                mri_img[np.array(getBetterOrientation(nib.load(self.ct_paths[index % self.ct_size]), "IPL").get_fdata()) == 0] = np.min(mri_img)
+                # mri_img[np.array(getBetterOrientation(nib.load(self.ct_paths[index % self.ct_size]), "IPL").get_fdata()) == 0] = np.min(mri_img)
                 registration_artifacts_idx = self.ct_transform(1- registration_artifacts_idx[np.newaxis, ...]*1.)
             else:
                 registration_artifacts_idx = self.mri_transform(1- registration_artifacts_idx[np.newaxis, ...]*1.)

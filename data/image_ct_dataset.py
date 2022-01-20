@@ -22,6 +22,7 @@ class ImageCTDataset(BaseDataset):
         self.surpress_registration_artifacts = True
 
         self.transformations = [
+            transforms.Lambda(lambda x: self.toGrayScale(x)),
             transforms.ToTensor(),
             transforms.Lambda(lambda x: x.type(torch.float16 if opt.amp else torch.float32)),
             SpatialRotation([(1,2)]),
@@ -39,6 +40,12 @@ class ImageCTDataset(BaseDataset):
     def center(self, x, mean, std):
         return (x - mean) / std
 
+    def toGrayScale(self, x):
+        x_min = np.amin(x)
+        x_max = np.amax(x) - x_min
+        x = (x - x_min) / x_max
+        return x
+
     def updateDataAugmentation(self):
         for t in self.transformations[-2:]:
             t.update()
@@ -54,16 +61,12 @@ class ImageCTDataset(BaseDataset):
         B_img = np.array(Image.open(B_path), dtype=np.float32)
 
         if self.surpress_registration_artifacts:
-            if self.opt.paired or self.opt.BtoA:
-                registration_artifacts_idx = A_img==127
+            if self.opt.paired or self.opt.direction=="BtoA":
+                registration_artifacts_idx = B_img==127
             else:
-                registration_artifacts_idx = np.array(Image.open(self.A_paths[index % self.A_size]), dtype=np.float32) == 127
-            if self.opt.BtoA:
-                B_img[np.array(Image.open(self.A_paths[index % self.A_size]), dtype=np.float32) == 127] = 0
-                registration_artifacts_idx = self.transform(1- registration_artifacts_idx[np.newaxis, ...]*1.)
-            else:
-                registration_artifacts_idx = self.transform(1- registration_artifacts_idx[np.newaxis, ...]*1.)
-            A_img[A_img==127] = 0
+                registration_artifacts_idx = np.array(Image.open(self.B_paths[index % self.B_size]), dtype=np.float32) == 127
+            registration_artifacts_idx = self.transform(1- registration_artifacts_idx*1.)
+            B_img[B_img==127] = 0
 
         if self.opt.paired:
             AB_img = np.stack([A_img,B_img], -1)
