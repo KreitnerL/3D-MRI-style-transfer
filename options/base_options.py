@@ -35,7 +35,7 @@ class BaseOptions():
         parser.add_argument('--bayesian', action='store_true', help='Use bayesian weight layers to produce confidence map')
         parser.add_argument('--input_nc', type=int, default=3, help='# of input image channels: 3 for RGB and 1 for grayscale')
         parser.add_argument('--output_nc', type=int, default=3, help='# of output image channels: 3 for RGB and 1 for grayscale')
-        parser.add_argument('--ngl', type=int, default=64, help='# of gen layers')
+        parser.add_argument('--ngl', type=int, default=3, help='# of gen layers')
         parser.add_argument('--ngf', type=int, default=64, help='# of gen filters in the last conv layer')
         parser.add_argument('--ndf', type=int, default=64, help='# of discrim filters in the first conv layer')
         parser.add_argument('--netD', type=str, default='basic', choices=['basic', 'obelisk', 'n_layers', 'pixel', 'patch', 'tilestylegan2', 'stylegan2'], help='specify discriminator architecture. The basic model is a 70x70 PatchGAN. n_layers allows you to specify the layers in the discriminator')
