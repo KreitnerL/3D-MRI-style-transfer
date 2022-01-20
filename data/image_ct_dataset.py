@@ -19,6 +19,7 @@ class ImageCTDataset(BaseDataset):
         self.B_paths = natural_sort(get_custom_file_paths(os.path.join(self.opt.dataroot, 'mri', self.opt.phase), '.png'))
         self.A_size = len(self.A_paths)  # get the size of dataset A
         self.B_size = len(self.B_paths)  # get the size of dataset B
+        self.surpress_registration_artifacts = True
 
         self.transformations = [
             transforms.ToTensor(),
@@ -52,6 +53,18 @@ class ImageCTDataset(BaseDataset):
         A_img = np.array(Image.open(A_path), dtype=np.float32)
         B_img = np.array(Image.open(B_path), dtype=np.float32)
 
+        if self.surpress_registration_artifacts:
+            if self.opt.paired or self.opt.BtoA:
+                registration_artifacts_idx = A_img==127
+            else:
+                registration_artifacts_idx = np.array(Image.open(self.A_paths[index % self.A_size]), dtype=np.float32) == 127
+            if self.opt.BtoA:
+                B_img[np.array(Image.open(self.A_paths[index % self.A_size]), dtype=np.float32) == 127] = 0
+                registration_artifacts_idx = self.transform(1- registration_artifacts_idx[np.newaxis, ...]*1.)
+            else:
+                registration_artifacts_idx = self.transform(1- registration_artifacts_idx[np.newaxis, ...]*1.)
+            A_img[A_img==127] = 0
+
         if self.opt.paired:
             AB_img = np.stack([A_img,B_img], -1)
             AB = self.transform(AB_img)
@@ -60,9 +73,12 @@ class ImageCTDataset(BaseDataset):
         else:
             A = self.transform(A_img)
             B = self.transform(B_img)
-        if self.opt.direction=='AtoB':
+        if self.opt.phase == 'train' and self.opt.direction=='AtoB':
             A = self.colorJitter(A)
-        return {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path}
+        data = {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path}
+        if self.surpress_registration_artifacts:
+            data['registration_artifacts_idx'] = registration_artifacts_idx
+        return data
 
     def __len__(self):
         """Return the total number of images in the dataset.
