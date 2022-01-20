@@ -204,6 +204,12 @@ class BaseModel(ABC):
                         # For 3D data, take a slice along the z-axis
                         else:
                             visual_ret[name] = [tmp[:,:]]
+            else:
+                if len(tmp[0])>1:
+                    for i in range(len(tmp[0])):
+                        visual_ret[name+f'_{i}'] = [tmp[:,i:i+1]]
+                else:
+                    visual_ret[name] = [tmp[:,:]]
         if self.opt.bayesian:
             std_map: torch.Tensor = self.std_map[0:1,0:1]
             if std_map.dim() == 5 and slice:
