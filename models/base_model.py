@@ -190,20 +190,13 @@ class BaseModel(ABC):
         for name in self.visual_names:
             if isinstance(name, str):
                 tmp = getattr(self, name).detach().cpu()
-                if tmp.dim() == 5:
-                    if len(tmp[0])>1:
-                        for i in range(len(tmp[0])):
-                            if slice:
-                                visual_ret[name+f'_{i}'] = [tmp[:,i:i+1,tmp.shape[-3]//2,:,:], tmp[:,i:i+1,:,tmp.shape[-2]//2,:], tmp[:,i:i+1,:,:,tmp.shape[-1]//2]]
-                    # For 3D data, take a slice along the z-axis
-                            else:
-                                visual_ret[name+f'_{i}'] = [tmp[:,i:i+1]]
-                else:
-                    visual_ret[name] = [tmp[:,:]]
-            else:
                 if len(tmp[0])>1:
                     for i in range(len(tmp[0])):
-                        visual_ret[name+f'_{i}'] = [tmp[:,i:i+1]]
+                        if tmp.dim() == 5 and slice:
+                            visual_ret[name+f'_{i}'] = [tmp[:,i:i+1,tmp.shape[-3]//2,:,:], tmp[:,i:i+1,:,tmp.shape[-2]//2,:], tmp[:,i:i+1,:,:,tmp.shape[-1]//2]]
+                    # For 3D data, take a slice along the z-axis
+                        else:
+                            visual_ret[name+f'_{i}'] = [tmp[:,i:i+1]]
                 else:
                     visual_ret[name] = [tmp[:,:]]
         if self.opt.bayesian:

@@ -120,8 +120,9 @@ class ColorJitterSphere3D():
             r = torch.rand(2) * 10 - 5
             self.ranges.append((r.min().item(), r.max().item()))
 
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        self.update()
+    def __call__(self, x: torch.Tensor, no_update=False) -> torch.Tensor:
+        if not no_update:
+            self.update()
 
         jitterSphere = torch.zeros(1)
         for i,r in enumerate(self.ranges):
