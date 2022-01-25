@@ -7,7 +7,7 @@ import os
 import numpy as np
 import torch
 from models.networks import setDimensions
-from data.data_augmentation_3D import ColorJitter3D, PadIfNecessary, SpatialRotation, SpatialFlip, getBetterOrientation
+from data.data_augmentation_3D import ColorJitter3D, PadIfNecessary, SpatialRotation, SpatialFlip, getBetterOrientation, toGrayScale
 
 class brain3DDataset(BaseDataset):
     def __init__(self, opt):
@@ -26,7 +26,7 @@ class brain3DDataset(BaseDataset):
             transforms.Lambda(lambda x: np.array(x.get_fdata())[np.newaxis, ...]),
             transforms.Lambda(lambda x: x[:,24:168,18:206,8:160]),
             # transforms.Lambda(lambda x: resize(x, (x.shape[0],96,80,112), order=1, anti_aliasing=True)),
-            transforms.Lambda(lambda x: self.toGrayScale(x)),
+            transforms.Lambda(lambda x: toGrayScale(x)),
             transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float16 if opt.amp else torch.float32)),
             PadIfNecessary(3),
         ]
