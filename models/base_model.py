@@ -198,7 +198,10 @@ class BaseModel(ABC):
                         else:
                             visual_ret[name+f'_{i}'] = [tmp[:,i:i+1]]
                 else:
-                    visual_ret[name] = [tmp[:,:]]
+                    if tmp.dim() == 5 and slice:
+                        visual_ret[name] = [tmp[:,:,tmp.shape[-3]//2,:,:], tmp[:,:,:,tmp.shape[-2]//2,:], tmp[:,:,:,:,tmp.shape[-1]//2]]
+                    else:
+                        visual_ret[name] = [tmp[:,:]]
         if self.opt.bayesian:
             std_map: torch.Tensor = self.std_map[0:1,0:1]
             if std_map.dim() == 5 and slice:
