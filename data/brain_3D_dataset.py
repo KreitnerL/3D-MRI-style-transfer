@@ -12,9 +12,12 @@ from data.data_augmentation_3D import ColorJitter3D, PadIfNecessary, SpatialRota
 class brain3DDataset(BaseDataset):
     def __init__(self, opt):
         super().__init__(opt)
-        self.A1_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 't1', opt.phase), 't1.nii.gz'))
-        self.A2_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 'flair', opt.phase), 'flair.nii.gz'))
-        self.B_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 'dir', opt.phase), 'dir.nii.gz'))
+        # self.A1_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 't1', opt.phase), 't1.nii.gz'))
+        # self.A2_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 'flair', opt.phase), 'flair.nii.gz'))
+        # self.B_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 'dir', opt.phase), 'dir.nii.gz'))
+        self.A1_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, f'center_1_2_{opt.phase}'), 't1ce.nii.gz'))
+        self.A2_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, f'center_1_2_{opt.phase}'), 't1.nii.gz'))
+        self.B_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, f'center_1_2_{opt.phase}'), 'flair.nii.gz'))
         self.A_size = len(self.A1_paths)  # get the size of dataset A
         self.B_size = len(self.B_paths)  # get the size of dataset B
         setDimensions(3, opt.bayesian)
@@ -24,7 +27,7 @@ class brain3DDataset(BaseDataset):
         transformations = [
             transforms.Lambda(lambda x: getBetterOrientation(x, "IPL")),
             transforms.Lambda(lambda x: np.array(x.get_fdata())[np.newaxis, ...]),
-            transforms.Lambda(lambda x: x[:,24:168,18:206,8:160]),
+            # transforms.Lambda(lambda x: x[:,24:168,18:206,8:160]),
             # transforms.Lambda(lambda x: resize(x, (x.shape[0],96,80,112), order=1, anti_aliasing=True)),
             transforms.Lambda(lambda x: toGrayScale(x)),
             transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float16 if opt.amp else torch.float32)),

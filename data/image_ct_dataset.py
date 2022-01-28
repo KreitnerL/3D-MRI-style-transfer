@@ -50,8 +50,8 @@ class ImageCTDataset(BaseDataset):
         A_img = np.array(Image.open(A_path), dtype=np.float32)
         B_img = np.array(Image.open(B_path), dtype=np.float32)
 
-        if self.surpress_registration_artifacts:
-            if self.opt.paired or self.opt.direction=="BtoA":
+        if self.surpress_registration_artifacts and self.opt.direction=="AtoB":
+            if self.opt.paired:
                 registration_artifacts_idx = B_img==127
             else:
                 registration_artifacts_idx = np.array(Image.open(self.B_paths[index % self.B_size]), dtype=np.float32) == 127
@@ -69,7 +69,7 @@ class ImageCTDataset(BaseDataset):
         if self.opt.phase == 'train' and self.opt.direction=='AtoB':
             A = self.colorJitter(A)
         data = {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path}
-        if self.surpress_registration_artifacts:
+        if self.surpress_registration_artifacts and self.opt.direction=="AtoB":
             data['registration_artifacts_idx'] = registration_artifacts_idx
         return data
 

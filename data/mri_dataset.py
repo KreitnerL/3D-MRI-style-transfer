@@ -29,7 +29,6 @@ class MRIDataset(BaseDataset):
             opt.BtoA = True
 
         transformations = [
-            transforms.Lambda(lambda x: toGrayScale(x)),
             transforms.Lambda(lambda x: torch.tensor(x, dtype=torch.float16 if opt.amp else torch.float32)),
             PadIfNecessary(3),
         ]
@@ -40,8 +39,8 @@ class MRIDataset(BaseDataset):
                 SpatialFlip(dims=(1,2,3), auto_update=False)
             ]
         transformations += self.updateTransformations
-        self.mri_transform = transforms.Compose(transformations)
-        self.ct_transform = transforms.Compose(transformations[1:])
+        self.mri_transform = transforms.Compose([transforms.Lambda(lambda x: toGrayScale(x)), *transformations])
+        self.ct_transform = transforms.Compose([transforms.Lambda(lambda x: (np.clip(x, -1000., 1000.) + 1000.) / 2000.), *transformations])
         self.colorJitter = ColorJitterSphere3D((0.3, 1.5), (0.3,1.5), sigma=0.5) # ColorJitter3D(brightness_min_max=(0.3, 1.5), contrast_min_max=(0.3, 1.5))
 
     def __getitem__(self, index):
@@ -64,25 +63,23 @@ class MRIDataset(BaseDataset):
             affine = nifti.affine
         nifti = getBetterOrientation(nifti, "IPL")
         ct_img = np.array(nifti.get_fdata())
-        if self.surpress_registration_artifacts and self.opt.phase == 'train':
-            if self.opt.paired or self.opt.BtoA:
+
+        # Remove registration artifacts from ct image
+        # Do not consider these pixels during loss calculation
+        if self.surpress_registration_artifacts and self.opt.AtoB:
+            if self.opt.paired:
                 registration_artifacts_idx = ct_img==0
             else:
                 registration_artifacts_idx = np.array(getBetterOrientation(nib.load(self.ct_paths[index % self.ct_size]), "IPL").get_fdata()) == 0
-            if self.opt.BtoA:
-                # mri_img[np.array(getBetterOrientation(nib.load(self.ct_paths[index % self.ct_size]), "IPL").get_fdata()) == 0] = np.min(mri_img)
-                registration_artifacts_idx = self.ct_transform(1- registration_artifacts_idx[np.newaxis, ...]*1.)
-            else:
                 registration_artifacts_idx = self.mri_transform(1- registration_artifacts_idx[np.newaxis, ...]*1.)
             ct_img[ct_img==0] = np.min(ct_img)
         mri = self.mri_transform(mri_img[np.newaxis, ...])
-        if(self.opt.phase == 'train') and self.opt.AtoB:
+        if self.opt.phase == 'train' and self.opt.AtoB:
             mri = self.colorJitter(mri)
-        ct_img = (np.clip(ct_img, -1000., 1000.) + 1000.) / 2000.
         ct = self.ct_transform(ct_img[np.newaxis, ...])
 
-        data = {'A': mri, 'B': ct, 'affine': affine, 'axis_code': "IPL", 'A_paths': mri_path, 'B_paths': ct_path}
-        if self.surpress_registration_artifacts and self.opt.phase == 'train':
+        data = {'A': mri, 'B': ct, 'affine': affine, 'axis_code': "IPL", 'A_paths': mri_path, 'B_paths': ct_path }
+        if self.surpress_registration_artifacts and self.opt.AtoB:
             data['registration_artifacts_idx'] = registration_artifacts_idx
         return data
 
