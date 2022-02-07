@@ -1,5 +1,4 @@
 from argparse import Namespace
-from models.networks import setDimensions
 from models import create_model
 from models.base_model import BaseModel
 import os

@@ -12,7 +12,7 @@ from models.networks import setDimensions
 class ImageCTDataset(BaseDataset):
     def __init__(self, opt):
         super().__init__(opt)
-        setDimensions(2, opt.bayesian)
+        setDimensions(2)
         
         self.A_paths = natural_sort(get_custom_file_paths(os.path.join(self.opt.dataroot, 'ct', self.opt.phase), '.png'))
         self.B_paths = natural_sort(get_custom_file_paths(os.path.join(self.opt.dataroot, 'mri', self.opt.phase), '.png'))

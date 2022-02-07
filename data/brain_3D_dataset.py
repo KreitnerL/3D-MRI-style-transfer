@@ -15,12 +15,12 @@ class brain3DDataset(BaseDataset):
         # self.A1_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 't1', opt.phase), 't1.nii.gz'))
         # self.A2_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 'flair', opt.phase), 'flair.nii.gz'))
         # self.B_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 'dir', opt.phase), 'dir.nii.gz'))
-        self.A1_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, f'center_1_2_{opt.phase}'), 't1ce.nii.gz'))
-        self.A2_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, f'center_1_2_{opt.phase}'), 't1.nii.gz'))
+        self.A1_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, f'center_1_2_{opt.phase}'), 't1.nii.gz'))
+        self.A2_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, f'center_1_2_{opt.phase}'), 't2.nii.gz'))
         self.B_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, f'center_1_2_{opt.phase}'), 'flair.nii.gz'))
         self.A_size = len(self.A1_paths)  # get the size of dataset A
         self.B_size = len(self.B_paths)  # get the size of dataset B
-        setDimensions(3, opt.bayesian)
+        setDimensions(3)
         opt.input_nc = 2
         opt.output_nc = 1
 

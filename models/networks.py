@@ -64,9 +64,12 @@ batchNormOptions = {
     3: BatchNorm3d
 }
 
-def setDimensions(dim: int, bayesian: bool = False):
+def setDimensions(dim: int=-1, bayesian: bool = False):
     global dimensions, conv, convTranspose, batchNorm, avgPool, adaptiveAvgPool, maxPool, adaptiveMaxPool
-    dimensions = dim
+    if dim == -1:
+        dim = dimensions
+    else:
+        dimensions = dim
     if bayesian:
         conv = bayesianConvOptions[dimensions]
         convTranspose = bayesianConvTransposeOptions[dimensions]
@@ -363,6 +366,7 @@ def define_G(input_nc, output_nc, ngf, netG, norm='instance', use_dropout=False,
 
     The generator has been initialized by <init_net>. It uses RELU for non-linearity.
     """
+    setDimensions(bayesian=opt.bayesian)
     net = None
     norm_layer = get_norm_layer(norm_type=norm)
 
@@ -385,6 +389,7 @@ def define_G(input_nc, output_nc, ngf, netG, norm='instance', use_dropout=False,
         net = G_Resnet(input_nc, output_nc, opt.nz, num_downs=2, n_res=n_blocks - 4, ngf=ngf, norm='inst', nl_layer='relu')
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
+    setDimensions(bayesian=False)
     return init_net(net, init_type, init_gain, gpu_ids, initialize_weights=('stylegan2' not in netG), nonlinearity='relu')
 
 
@@ -641,8 +646,8 @@ class Normalize(nn.Module):
         self.power = power
 
     def forward(self, x):
-        norm = x.pow(self.power).sum(1, keepdim=True).pow(1. / self.power)
-        out = x.div(norm + 1e-7)
+        norm = x.pow(self.power).sum(1, keepdim=True).pow(1. / self.power).type(torch.float16)
+        out: torch.Tensor = x.div(norm + 1e-7)
         return out
 
 
@@ -760,11 +765,15 @@ class PatchSampleF(nn.Module):
             else:
                 x_sample = feat_reshape
                 patch_id = []
-            if self.use_mlp:
-                mlp = getattr(self, 'mlp_%d' % feat_id)
-                x_sample = mlp(x_sample)
-            return_ids.append(patch_id)
-            x_sample = self.l2norm(x_sample)
+            with torch.cuda.amp.autocast(enabled=False):
+                t = x_sample.dtype
+                x_sample = x_sample.type(torch.float32)
+                if self.use_mlp:
+                    mlp = getattr(self, 'mlp_%d' % feat_id)
+                    x_sample = mlp(x_sample)
+                return_ids.append(patch_id)
+                x_sample = self.l2norm(x_sample)
+                x_sample = x_sample.type(t)
 
             if num_patches == 0:
                 if feat.dim() == 5:

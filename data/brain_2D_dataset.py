@@ -12,14 +12,12 @@ from models.networks import setDimensions
 class Brain2DDataset(BaseDataset):
     def __init__(self, opt):
         super().__init__(opt)
-        setDimensions(2, opt.bayesian)
-        
+        setDimensions(2)
         self.A1_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 't1', opt.phase), '.png'))
         self.A2_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 'flair', opt.phase), '.png'))
         self.B_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 'dir', opt.phase), '.png'))
         self.A_size = len(self.A1_paths)  # get the size of dataset A
         self.B_size = len(self.B_paths)  # get the size of dataset B
-        setDimensions(2, opt.bayesian)
         opt.input_nc = 2
         opt.output_nc = 1
 
