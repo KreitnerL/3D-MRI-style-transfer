@@ -7,11 +7,14 @@ from options.train_options import TrainOptions
 from data import create_dataset
 from ray import tune
 from ray.tune.schedulers.pb2 import PB2
+from ray.tune.schedulers import ASHAScheduler
+from ray.tune.suggest.hyperopt import HyperOptSearch
 from ray.tune.trial import ExportFormat
 import numpy as np
 from util.plot_pbt import plotPBT
 import random
 SEED = random.randint(0,1e6)
+METRIC = 'episode_reward_mean'
 
 validation_loss_fun = torch.nn.L1Loss()
 
@@ -82,12 +85,12 @@ def training_function(config, checkpoint_dir=None):
                         path = os.path.join(checkpoint_dir, "checkpoint")
                         d = {
                             'step': step,
-                            'score': scores[-1],
+                            METRIC: scores[-1],
                             'scores': scores
                         }
                         model.create_checkpoint(path, d)
 
-                tune.report(score=scores[-1])
+                tune.report(episode_reward_mean=scores[-1])
             
             
 
@@ -106,9 +109,9 @@ class CustomStopper(tune.Stopper):
         def __call__(self, trial_id, result):
             step = result["training_iteration"]-1
             if  len(self.scores)<=step:
-                self.scores.append(result["score"])
+                self.scores.append(result[METRIC])
             else:
-                self.scores[step] = min(self.scores[step], result["score"])
+                self.scores[step] = min(self.scores[step], result[METRIC])
             return self.should_stop or (len(self.scores)>self.patience and min(self.scores[-self.patience:]) > min(self.scores[:-self.patience])-self.tolerance)
 
         def stop_all(self):
@@ -118,7 +121,8 @@ def compute_gpu_load(num_trails):
     return {"gpu": int(100.0/num_trails)/100.0 }
 
 search_space = {
-            "lr":  [0.0001, 0.0003]
+            "lr":  [0.00001, 0.0003],
+            "lambda_L1": [1,300]
         }
 
 PBB = PB2(
@@ -126,6 +130,15 @@ PBB = PB2(
     perturbation_interval=5,
     hyperparam_bounds=search_space
 )
+
+asha_scheduler = ASHAScheduler(
+    time_attr='training_iteration',
+    metric=METRIC,
+    mode='max',
+    max_t=100,
+    grace_period=10,
+    reduction_factor=3,
+    brackets=1)
 
 init_opt = TrainOptions().parse()
 os.environ["RAY_MEMORY_MONITOR_ERROR_THRESHOLD"] = "1"
@@ -138,19 +151,25 @@ STEPS_TO_NEXT_CHECKPOINT = 5
 start_config = {key: tune.uniform(*val) for key, val in search_space.items()}
 start_config.update({'seed': SEED})
 
+hyperopt_search = HyperOptSearch(
+    metric="episode_reward_mean", mode="min")
+
 analysis = tune.run(
     training_function,
     local_dir='ray_results/',
     name=init_opt.name,
-    scheduler=PBB,
-    metric="score",
-    checkpoint_score_attr="min-score",
-    mode="max",
+    scheduler=asha_scheduler,
+    search_alg=hyperopt_search,
+    checkpoint_score_attr="min-"+METRIC,
+    # scheduler=PBB,
+    # metric="score",
+    # checkpoint_score_attr="min-score",
+    # mode="min",
     stop=stopper,
     export_formats=[ExportFormat.MODEL],
-    resources_per_trial=compute_gpu_load(3),
+    resources_per_trial=compute_gpu_load(4),
     keep_checkpoints_num=1,
-    num_samples=8,
+    num_samples=24,
     config=start_config,
     raise_on_failed_trial=False
 )
