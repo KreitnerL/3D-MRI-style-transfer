@@ -108,7 +108,7 @@ if __name__ == '__main__':
         tmp = opt.serial_batches, opt.paired
         opt.serial_batches=True
         opt.paired = True
-        for i in tqdm(range(int(len(test_dataset) / opt.batch_size)), desc='(epoch %d) Validation'%epoch):
+        for i in tqdm(range(len(test_dataset) // opt.batch_size), desc='(epoch %d) Validation'%epoch):
             test_data = next(test_dataset_iter, None)
             if test_data is None:
                 test_dataset_iter = iter(test_dataset)

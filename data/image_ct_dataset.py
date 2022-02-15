@@ -50,7 +50,7 @@ class ImageCTDataset(BaseDataset):
         A_img = np.array(Image.open(A_path), dtype=np.float32)
         B_img = np.array(Image.open(B_path), dtype=np.float32)
 
-        if self.surpress_registration_artifacts and self.opt.direction=="AtoB":
+        if self.surpress_registration_artifacts and self.opt.direction=="AtoB" and self.opt.phase == 'train':
             if self.opt.paired:
                 registration_artifacts_idx = B_img==127
             else:
