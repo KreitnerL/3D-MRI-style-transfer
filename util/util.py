@@ -285,3 +285,27 @@ def loss_log_2_png(path: str, dataset_size=234):
     
     out_path = os.path.join(folder_path, 'train_loss.png')
     plt.savefig(out_path, format='png', bbox_inches='tight')
+
+class NCC(torch.nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+    
+    def forward(self, src: torch.Tensor, trg: torch.Tensor) -> torch.Tensor:
+        src = src.float().flatten(1)
+        trg = trg.float().flatten(1)
+        ncc = ( ((src-src.mean(1))*(trg-trg.mean(1))) / (src.std(1)*trg.std(1)) ).mean(1)
+        return ncc
+
+class PSNR(torch.nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def forward(self, src: torch.Tensor, trg: torch.Tensor) -> torch.Tensor:
+        src = src.float().flatten(1)
+        trg = trg.float().flatten(1)
+        mse = ((src - trg) ** 2).mean(1)
+        if mse == 0:
+            return 100
+        psnr = 10 * torch.log10(65025 / mse)
+        return psnr / 100
+        
