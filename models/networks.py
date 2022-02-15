@@ -10,7 +10,7 @@ from torch.nn.parameter import Parameter
 from torch.optim import lr_scheduler
 import numpy as np
 from .stylegan_networks import StyleGAN2Discriminator, StyleGAN2Generator
-from models.bayesian import BayesianConv2d, BayesianConv3d, BayesianConvTranspose2d, BayesianConvTranspose3d
+from models.bayesian import BayesianConv2d, BayesianConv3d, BayesianConvTranspose2d, BayesianConvTranspose3d, UncertaintyDropout
 
 
 dimensions = 2
@@ -1687,9 +1687,10 @@ class SIT(nn.Module):
     """
     The Scout-Identify-Transform network for modality translation.
     """
-    def __init__(self, C: tuple, factor=4, norm_layer=nn.InstanceNorm2d):
+    def __init__(self, C: tuple, factor=4, norm_layer=nn.InstanceNorm2d, use_dropout=False):
         super().__init__()
         C_in, C_mid, C_out = C
+        dropout_p = 0.2
         self.factor = factor
         self.layers = nn.ModuleList([])
         self.layers_in = nn.Sequential()
@@ -1705,6 +1706,9 @@ class SIT(nn.Module):
             else:
                 combine_module = []
             if i==1:
+                dropoutLayer = []
+                if use_dropout:
+                    dropoutLayer.append(UncertaintyDropout(dropout_p, dimensions))
                 self.layers.append(
                     nn.Sequential(
                         *combine_module,
@@ -1714,6 +1718,7 @@ class SIT(nn.Module):
                         DenseShortut(C_mid, norm_layer=norm_layer),
                         norm_layer(C_mid),
                         nn.ReLU(True),
+                        *dropoutLayer,
                         convTranspose(C_mid, 8, kernel_size=3, stride=2, padding=1, output_padding=1),
                         norm_layer(8),
                         nn.ReLU(True),
@@ -1731,10 +1736,11 @@ class SIT(nn.Module):
                         nn.ReLU(True),
                     )
                 )
-    
+        dropoutLayer = []
+        if use_dropout:
+            dropoutLayer.append(UncertaintyDropout(dropout_p, dimensions))
         self.out = nn.Sequential(
-            norm_layer(8),
-            nn.ReLU(True),
+            *dropoutLayer,
             conv(8, C_out, 3, padding=1),
             nn.Sigmoid())
 

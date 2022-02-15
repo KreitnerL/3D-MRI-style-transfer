@@ -640,3 +640,14 @@ class BayesianConvTranspose3d(BayesianModule):
                         output_padding=output_padding,
                         dilation=self.dilation,
                         groups=self.groups)
+
+class UncertaintyDropout(nn.model):
+    def __init__(self, p=0.2, dimensions=2) -> None:
+        super().__init__()
+        self.f = F.dropout2d if dimensions == 2 else F.dropout3d
+        self.p = p
+
+    def forward(self, x: torch.Tensor):
+        return self.f(x, p=self.p, training=False, inplace = True)
+
+    
