@@ -10,7 +10,7 @@ from torch.nn.parameter import Parameter
 from torch.optim import lr_scheduler
 import numpy as np
 from .stylegan_networks import StyleGAN2Discriminator, StyleGAN2Generator
-from models.bayesian import BayesianConv2d, BayesianConv3d, BayesianConvTranspose2d, BayesianConvTranspose3d, UncertaintyDropout
+from models.bayesian import BayesianConv2d, BayesianConv3d, BayesianConvTranspose2d, BayesianConvTranspose3d, MCDropoutConv, MCDropoutTransposeConv
 
 
 dimensions = 2
@@ -64,15 +64,23 @@ batchNormOptions = {
     3: BatchNorm3d
 }
 
-def setDimensions(dim: int=-1, bayesian: bool = False):
+def setDimensions(dim: int=-1,confidence=None):
     global dimensions, conv, convTranspose, batchNorm, avgPool, adaptiveAvgPool, maxPool, adaptiveMaxPool
     if dim == -1:
         dim = dimensions
     else:
         dimensions = dim
-    if bayesian:
+    if confidence=='bayesian':
         conv = bayesianConvOptions[dimensions]
         convTranspose = bayesianConvTransposeOptions[dimensions]
+    elif confidence=='dropout':
+        MCDropoutConv.dimensions = dimensions
+        MCDropoutConv.conv = convOptions[dimensions]
+        conv = MCDropoutConv
+
+        MCDropoutTransposeConv.dimensions = dimensions
+        MCDropoutTransposeConv.conv = convTransposeOptions[dimensions]
+        convTranspose = MCDropoutTransposeConv
     else:
         conv = convOptions[dimensions]
         convTranspose = convTransposeOptions[dimensions]
@@ -366,7 +374,6 @@ def define_G(input_nc, output_nc, ngf, netG, norm='instance', use_dropout=False,
 
     The generator has been initialized by <init_net>. It uses RELU for non-linearity.
     """
-    setDimensions(bayesian=opt.confidence == 'bayesian')
     net = None
     norm_layer = get_norm_layer(norm_type=norm)
 
@@ -389,7 +396,6 @@ def define_G(input_nc, output_nc, ngf, netG, norm='instance', use_dropout=False,
         net = G_Resnet(input_nc, output_nc, opt.nz, num_downs=2, n_res=n_blocks - 4, ngf=ngf, norm='inst', nl_layer='relu')
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
-    setDimensions(bayesian=False)
     return init_net(net, init_type, init_gain, gpu_ids, initialize_weights=('stylegan2' not in netG), nonlinearity='relu')
 
 
@@ -1706,27 +1712,25 @@ class SIT(nn.Module):
             else:
                 combine_module = []
             if i==1:
-                dropoutLayer = []
-                if confidence == 'dropout':
-                    dropoutLayer.append(UncertaintyDropout(dropout_p, dimensions))
-                elif confidence == 'bayesian':
-                    setDimensions(bayesian=True)
+                setDimensions(confidence=confidence)
+                layer = [
+                    *combine_module,
+                    DenseShortut(C_mid, norm_layer=norm_layer),
+                    norm_layer(C_mid),
+                    nn.ReLU(True),
+                    DenseShortut(C_mid, norm_layer=norm_layer),
+                    norm_layer(C_mid),
+                    nn.ReLU(True)
+                ]
+                setDimensions(confidence=None)
                 self.layers.append(
                     nn.Sequential(
-                        *combine_module,
-                        DenseShortut(C_mid, norm_layer=norm_layer),
-                        norm_layer(C_mid),
-                        nn.ReLU(True),
-                        DenseShortut(C_mid, norm_layer=norm_layer),
-                        norm_layer(C_mid),
-                        nn.ReLU(True),
-                        *dropoutLayer,
+                        *layer,
                         convTranspose(C_mid, 8, kernel_size=3, stride=2, padding=1, output_padding=1),
                         norm_layer(8),
                         nn.ReLU(True),
                     )
                 )
-                setDimensions(bayesian=False)
             else:
                 self.layers.append(
                     nn.Sequential(

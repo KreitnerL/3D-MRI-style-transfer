@@ -641,13 +641,36 @@ class BayesianConvTranspose3d(BayesianModule):
                         dilation=self.dilation,
                         groups=self.groups)
 
-class UncertaintyDropout(nn.Module):
-    def __init__(self, p=0.2, dimensions=2) -> None:
+class MCDropoutConv(nn.Module):
+    p=0.2
+    dimensions=2
+    conv=nn.Conv2d
+
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__()
-        self.f = F.dropout2d if dimensions == 2 else F.dropout3d
-        self.p = p
+        self.f = F.dropout2d if self.dimensions == 2 else F.dropout3d
+        self.p = self.p
+        self.c= self.conv(*args, **kwargs)
 
     def forward(self, x: torch.Tensor):
-        return self.f(x, p=self.p, training=True, inplace=False)
+        x = self.f(x, p=self.p, training=True, inplace=False)
+        x = self.c(x)
+        return x
+
+class MCDropoutTransposeConv(nn.Module):
+    p=0.2
+    dimensions=2
+    conv=nn.ConvTranspose2d
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__()
+        self.f = F.dropout2d if self.dimensions == 2 else F.dropout3d
+        self.p = self.p
+        self.c= self.conv(*args, **kwargs)
+
+    def forward(self, x: torch.Tensor):
+        x = self.f(x, p=self.p, training=True, inplace=False)
+        x = self.c(x)
+        return x
 
     
