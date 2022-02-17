@@ -32,7 +32,7 @@ class BaseOptions():
         parser.add_argument('--checkpoint_path', type=str, default=None, help='path to specific checkpoint file')
         # model parameters
         parser.add_argument('--model', type=str, default='cut', help='chooses which model to use.')
-        parser.add_argument('--bayesian', action='store_true', help='Use bayesian weight layers to produce confidence map')
+        parser.add_argument('--confidence', type=str, default=None, choices=['bayesian', 'dropout'], help='Produce confidence map')
         parser.add_argument('--input_nc', type=int, default=3, help='# of input image channels: 3 for RGB and 1 for grayscale')
         parser.add_argument('--output_nc', type=int, default=3, help='# of output image channels: 3 for RGB and 1 for grayscale')
         parser.add_argument('--ngl', type=int, default=3, help='# of gen layers')

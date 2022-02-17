@@ -293,7 +293,7 @@ class NCC(torch.nn.Module):
     def forward(self, src: torch.Tensor, trg: torch.Tensor) -> torch.Tensor:
         src = src.float().flatten(1)
         trg = trg.float().flatten(1)
-        ncc = ( ((src-src.mean(1))*(trg-trg.mean(1))) / (src.std(1)*trg.std(1)) ).mean(1)
+        ncc = ( ((src-src.mean(1, keepdim=True))*(trg-trg.mean(1, keepdim=True))) / (src.std(1, keepdim=True)*trg.std(1, keepdim=True)) ).mean(1)
         return ncc
 
 class PSNR(torch.nn.Module):
@@ -304,8 +304,8 @@ class PSNR(torch.nn.Module):
         src = src.float().flatten(1)
         trg = trg.float().flatten(1)
         mse = ((src - trg) ** 2).mean(1)
-        if mse == 0:
+        if mse.max() == 0:
             return 100
-        psnr = 10 * torch.log10(65025 / mse)
+        psnr = 10 * torch.log10(1. / mse)
         return psnr / 100
         

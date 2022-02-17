@@ -155,7 +155,7 @@ class BaseModel(ABC):
         with torch.no_grad():
             with torch.cuda.amp.autocast(enabled=self.opt.amp):
                 self.forward()
-                if self.opt.bayesian:
+                if self.opt.confidence is not None:
                     preds = [self.fake_B]
                     for i in range(10 - 1):
                         self.forward()
@@ -202,7 +202,7 @@ class BaseModel(ABC):
                         visual_ret[name] = [tmp[:,:,tmp.shape[-3]//2,:,:], tmp[:,:,:,tmp.shape[-2]//2,:], tmp[:,:,:,:,tmp.shape[-1]//2]]
                     else:
                         visual_ret[name] = [tmp[:,:]]
-        if self.opt.bayesian:
+        if self.opt.confidence is not None:
             std_map: torch.Tensor = self.std_map[0:1,0:1]
             if std_map.dim() == 5 and slice:
                 std_maps = []

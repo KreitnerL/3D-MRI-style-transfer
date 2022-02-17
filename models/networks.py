@@ -366,7 +366,7 @@ def define_G(input_nc, output_nc, ngf, netG, norm='instance', use_dropout=False,
 
     The generator has been initialized by <init_net>. It uses RELU for non-linearity.
     """
-    setDimensions(bayesian=opt.bayesian)
+    setDimensions(bayesian=opt.confidence == 'bayesian')
     net = None
     norm_layer = get_norm_layer(norm_type=norm)
 
@@ -375,7 +375,7 @@ def define_G(input_nc, output_nc, ngf, netG, norm='instance', use_dropout=False,
     elif netG == 'obelisk':
         net = ObeliskHybridGenerator(output_nc)
     elif netG == 'sit':
-        net = SIT((input_nc,opt.ngf,output_nc), norm_layer=norm_layer)
+        net = SIT((input_nc,opt.ngf,output_nc), norm_layer=norm_layer, confidence=opt.confidence)
     elif netG == 'unet_128':
         net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
     elif netG == 'unet_256':
@@ -1687,7 +1687,7 @@ class SIT(nn.Module):
     """
     The Scout-Identify-Transform network for modality translation.
     """
-    def __init__(self, C: tuple, factor=4, norm_layer=nn.InstanceNorm2d, use_dropout=False):
+    def __init__(self, C: tuple, factor=4, norm_layer=nn.InstanceNorm2d, confidence=None):
         super().__init__()
         C_in, C_mid, C_out = C
         dropout_p = 0.2
@@ -1707,8 +1707,10 @@ class SIT(nn.Module):
                 combine_module = []
             if i==1:
                 dropoutLayer = []
-                if use_dropout:
+                if confidence == 'dropout':
                     dropoutLayer.append(UncertaintyDropout(dropout_p, dimensions))
+                elif confidence == 'bayesian':
+                    setDimensions(bayesian=True)
                 self.layers.append(
                     nn.Sequential(
                         *combine_module,
@@ -1724,6 +1726,7 @@ class SIT(nn.Module):
                         nn.ReLU(True),
                     )
                 )
+                setDimensions(bayesian=False)
             else:
                 self.layers.append(
                     nn.Sequential(
@@ -1736,11 +1739,7 @@ class SIT(nn.Module):
                         nn.ReLU(True),
                     )
                 )
-        dropoutLayer = []
-        if use_dropout:
-            dropoutLayer.append(UncertaintyDropout(dropout_p, dimensions))
         self.out = nn.Sequential(
-            *dropoutLayer,
             conv(8, C_out, 3, padding=1),
             nn.Sigmoid())
 

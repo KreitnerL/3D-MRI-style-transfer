@@ -17,7 +17,7 @@ class MRIDataset(BaseDataset):
         self.surpress_registration_artifacts = True
         self.mri_size = len(self.mri_paths)  # get the size of dataset A
         self.ct_size = len(self.ct_paths)  # get the size of dataset B
-        setDimensions(3, opt.bayesian)
+        setDimensions(3)
         opt.no_antialias = True
         opt.no_antialias_up = True
 
