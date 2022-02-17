@@ -1,5 +1,6 @@
 """This module contains simple helper functions """
 from __future__ import print_function
+import csv
 import torch
 import numpy as np
 from PIL import Image
@@ -10,7 +11,7 @@ from argparse import Namespace
 import torchvision
 import nibabel as nib
 import matplotlib.pyplot as plt
-import re
+import io
 import matplotlib as mpl
 
 def colorFader(mix: float, c1='k',c2='r'): #fade (linear interpolate) from color c1 (at mix=0) to c2 (mix=1)
@@ -205,19 +206,30 @@ def correct_resize(t, size, mode=Image.BICUBIC):
     return torch.stack(resized, dim=0).to(device)
 
 def load_val_log(path: str):
-    val = []
-    legend = None
     with open(path) as f:
-        lines = [line.rstrip() for line in f]
-    for line in lines:
-        if line.startswith('='):
-            val = []
-            continue
-        line = line.split(') ')[-1]
-        ls = line.split(', ')
-        val.append([float(l.split(': ')[-1]) for l in ls])
-        if legend is None:
-            legend = [l.split(': ')[0] for l in ls]
+        content = ''
+        for line in [line.rstrip() for line in f]:
+            if line.startswith('='):
+                content = ''
+                continue
+            content += line + '\n'
+        reader = csv.DictReader(io.StringIO(content))
+        meta = ['epoch', 'iters', 'time', 'data']
+        legend = [k for k in reader.fieldnames if k not in meta]
+        val = [[float(l[k]) for k in legend] for l in reader]
+    # val = []
+    # legend = None
+    # with open(path) as f:
+    #     lines = [line.rstrip() for line in f]
+    # for line in lines:
+    #     if line.startswith('='):
+    #         val = []
+    #         continue
+    #     line = line.split(') ')[-1]
+    #     ls = line.split(', ')
+    #     val.append([float(l.split(': ')[-1]) for l in ls])
+    #     if legend is None:
+    #         legend = [l.split(': ')[0] for l in ls]
     return val, legend
 
 def val_log_2_png(path: str):
@@ -240,32 +252,48 @@ def load_loss_log(path: str, dataset_size=0):
     """
     Loads the given loss file, extracts all losses and returns them in a struct
     """
-    legend = []
-    y = []
-    x = []
-    has_legend = False
     with open(path) as f:
-        lines = [line.rstrip() for line in f]
-    for line in lines:
-        if line.startswith('='):
-            legend = []
-            y = []
-            x = []
-            has_legend=False
-            continue
-        meta_data = re.sub('\(|\)|\:|\,', '', re.search('\(.*\)', line).group(0)).split()
-        x_i = (int(meta_data[1]) + int(meta_data[3])/dataset_size)-1
-        line =  re.sub('\(.*\)', '', line)
-        y_i = []
-        for t in line.split():
-            try:
-                y_i.append(float(t))
-            except ValueError:
-                if not has_legend and len(t)>1:
-                    legend.append(t.replace(':', ''))
-        has_legend=True
-        y.append(y_i)
-        x.append(x_i)
+        content = ''
+        for line in [line.rstrip() for line in f]:
+            if line.startswith('='):
+                content = ''
+                continue
+            content += line + '\n'
+    reader = csv.DictReader(io.StringIO(content))
+    legend = reader.fieldnames
+    meta = ['epoch', 'iters', 'time', 'data']
+    rows = [l for l in reader]
+    legend = [l for l in rows[0].keys() if l not in meta]
+    x = [float(l['epoch']) for l in rows]
+    y = [[float(l[k]) for k in legend] for l in rows]
+
+
+    # legend = []
+    # y = []
+    # x = []
+    # has_legend = False
+    # with open(path) as f:
+    #     lines = [line.rstrip() for line in f]
+    # for line in lines:
+    #     if line.startswith('='):
+    #         legend = []
+    #         y = []
+    #         x = []
+    #         has_legend=False
+    #         continue
+    #     meta_data = re.sub('\(|\)|\:|\,', '', re.search('\(.*\)', line).group(0)).split()
+    #     x_i = (int(meta_data[1]) + int(meta_data[3])/dataset_size)-1
+    #     line =  re.sub('\(.*\)', '', line)
+    #     y_i = []
+    #     for t in line.split():
+    #         try:
+    #             y_i.append(float(t))
+    #         except ValueError:
+    #             if not has_legend and len(t)>1:
+    #                 legend.append(t.replace(':', ''))
+    #     has_legend=True
+    #     y.append(y_i)
+    #     x.append(x_i)
     return x, y, legend
 
 def loss_log_2_png(path: str, dataset_size=234):

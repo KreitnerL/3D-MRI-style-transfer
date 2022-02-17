@@ -6,6 +6,7 @@ import time
 from . import util, html
 from subprocess import Popen, PIPE
 import matplotlib.pyplot as plt
+import csv
 
 if sys.version_info[0] == 2:
     VisdomExceptionBase = Exception
@@ -118,17 +119,11 @@ class Visualizer():
             print('create web directory %s...' % self.web_dir)
             util.mkdirs([self.web_dir, self.img_dir])
         # create a logging file to store training losses
-        self.log_name = os.path.join(opt.checkpoints_dir, opt.name, 'loss_log.txt')
-        if not opt.continue_train:
-            with open(self.log_name, "a") as log_file:
-                now = time.strftime("%c")
-                log_file.write('================ Training Loss (%s) ================\n' % now)
+        self.log_name = os.path.join(opt.checkpoints_dir, opt.name, 'loss_log.csv')
+        self.train_loss_header = opt.continue_train
         self.loss_plot_name = os.path.join(opt.checkpoints_dir, opt.name, 'train_loss.png')
-        self.val_loss_log_name = os.path.join(opt.checkpoints_dir, opt.name, 'val_loss_log.txt')
-        if not opt.continue_train:
-            with open(self.val_loss_log_name, "a") as log_file:
-                now = time.strftime("%c")
-                log_file.write('================ Validation Loss (%s) ================\n' % now)
+        self.val_loss_log_name = os.path.join(opt.checkpoints_dir, opt.name, 'val_loss_log.csv')
+        self.val_loss_header = opt.continue_train
         self.val_plot_name = os.path.join(opt.checkpoints_dir, opt.name, 'val.png')
 
 
@@ -348,20 +343,38 @@ class Visualizer():
         except VisdomExceptionBase:
             self.create_visdom_connections()
 
-    def print_and_get_loss_message(self, epoch, iters, losses, t_comp, t_data):
-        message1 = '(epoch: %d, iters: %d, time: %.3f, data: %.3f) ' % (epoch, iters, t_comp, t_data)
-        message2 = '(epoch: %d) '%epoch
+    def print_and_get_loss_message(self, epoch, losses: dict, t_comp, t_data):
+        row = {
+            'epoch': epoch,
+            'time': t_comp,
+            'data': t_data
+        }
+        row.update(losses)
+        header = list(row.keys())
+
+        message2 = '(epoch: %d) '%int(epoch)
         for k, v in losses.items():
-            message1 += '%s: %.3f ' % (k, v)
             message2 += '%s: %.3f ' % (k, v)
 
         with open(self.log_name, "a") as log_file:
-            log_file.write('%s\n' % message1)  # save the message
+            writer = csv.DictWriter(log_file, fieldnames=header)
+            if not self.train_loss_header:
+                log_file.write('================ Training Loss (%s) ================\n' % time.strftime("%c"))
+                writer.writeheader()
+                self.train_loss_header=True
+            writer.writerow(row)
         return message2
 
     def print_validation_loss(self, epoch, loss):
-        message = f'(epoch: {epoch}) '
-        for k,v in loss.items():
-            message += '%s: %.3f, ' % (k, v)
+        row = {
+            'epoch': epoch,
+        }
+        row.update(loss)
+        header = list(row.keys())
         with open(self.val_loss_log_name, "a") as log_file:
-            log_file.write('%s\n' % message[:-2])  # save the message
+            writer = csv.DictWriter(log_file, fieldnames=header)
+            if not self.val_loss_header:
+                log_file.write('================ Validation Loss (%s) ================\n' % time.strftime("%c"))
+                writer.writeheader()
+                self.val_loss_header=True
+            writer.writerow(row)

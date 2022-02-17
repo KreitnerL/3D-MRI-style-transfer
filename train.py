@@ -90,7 +90,7 @@ if __name__ == '__main__':
 
             if total_iters % opt.print_freq == 0:    # print training losses and save logging information to the disk
                 losses = model.get_current_losses()
-                message = visualizer.print_and_get_loss_message(epoch, epoch_iter, losses, optimize_time, t_data)
+                message = visualizer.print_and_get_loss_message(epoch + float(epoch_iter) / dataset_size, losses, optimize_time, t_data)
                 if opt.display_id is None or opt.display_id > 0:
                     visualizer.plot_current_losses(epoch, float(epoch_iter) / dataset_size, losses)
 

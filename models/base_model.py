@@ -118,8 +118,8 @@ class BaseModel(ABC):
             else:
                 self.load_networks(load_suffix)
         if self.isTrain and opt.continue_train and int(opt.epoch_count) > 0:
-            loss_data = load_loss_log(os.path.join(load_dir, 'loss_log.txt'), opt.dataset_size)
-            y, legend = load_val_log(os.path.join(load_dir, 'val_loss_log.txt'))
+            loss_data = load_loss_log(os.path.join(load_dir, 'loss_log.csv'), opt.dataset_size)
+            y, legend = load_val_log(os.path.join(load_dir, 'val_loss_log.csv'))
             val_data = (list(range(len(y))), y, legend)
             v: Visualizer = opt.visualizer
             v.set_plot_data(loss_data, val_data)
