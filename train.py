@@ -5,7 +5,7 @@ from options.train_options import TrainOptions
 from data import create_dataset
 from models import create_model
 from util.ssim import SSIM
-from util.util import NCC, PSNR
+from util.util import PSNR
 from util.visualizer import Visualizer
 
 
@@ -33,7 +33,7 @@ if __name__ == '__main__':
         'L1': torch.nn.L1Loss(),
         'SSIM': SSIM(),
         'PSNR/100': PSNR(),
-        'NCC': NCC()
+        # 'NCC': NCC()
     }
 
     optimize_time = 0.1

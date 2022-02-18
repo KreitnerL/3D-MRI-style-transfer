@@ -33,7 +33,8 @@ class Pix2PixModel(BaseModel):
         if is_train:
             parser.set_defaults(pool_size=0, gan_mode='lsgan', paired=True)
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
-        parser.add_argument('--lambda_perceptual', type=float, default=1.5, help="weight for perceptual loss")
+            parser.add_argument('--perceptual', action='store_true', default=False, help="If set use perceptual loss")
+            parser.add_argument('--multitask',  action='store_true', default=False, help="If set learn the weights of the multi-task loss automatically")
 
         return parser
 
@@ -46,7 +47,7 @@ class Pix2PixModel(BaseModel):
         BaseModel.__init__(self, opt)
         # specify the training losses you want to print out. The training/test scripts will call <BaseModel.get_current_losses>
         self.loss_names = ['G_GAN', 'G_L1', 'D_real', 'D_fake']
-        if opt.lambda_perceptual != 0:
+        if opt.perceptual:
             self.loss_names.append('G_perceptual')
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
         self.visual_names = ['real_A', 'fake_B', 'real_B']
@@ -63,15 +64,24 @@ class Pix2PixModel(BaseModel):
             self.netD = networks.define_D(opt.input_nc + opt.output_nc, opt.ndf, opt.netD,
                                           opt.n_layers_D, opt.normD, opt.init_type, opt.init_gain, opt.no_antialias, self.gpu_ids, opt)
             self.networks.extend([self.netD])
-        if self.isTrain:
+
             # define loss functions
             self.criterionGAN = networks.GANLoss(opt.gan_mode, dtype=torch.float16 if opt.amp else torch.float32).to(self.device)
-            l1 = torch.nn.L1Loss()
-            self.perceptual_loss = torch.nn.L1Loss()
-
-            self.criterionL1 = lambda i1,i2: l1(i1,i2)
+            self.l1 = torch.nn.L1Loss()
+            self.layers = []
+    
+            if opt.perceptual:
+                self.layers = [0, 3, 6, 9]
+                self.perceptual_loss = torch.nn.L1Loss()
+                λ_G = [opt.lambda_L1, 1.0, 0.3, 0.3, 0.2]
+                if opt.multitask:
+                    self.to_sigma = lambda x: (1/(2*torch.exp(x)))
+                    self.λ_G = torch.nn.ParameterList([torch.nn.Parameter(torch.tensor(1./(2*λ_i)).log()) for λ_i in λ_G]).to(device=opt.gpu_ids[0])
+                else:
+                    self.to_sigma = lambda x: x
+                    self.λ_G = torch.nn.ParameterList([torch.nn.Parameter(torch.tensor(λ_i), requires_grad=False) for λ_i in λ_G]).to(device=opt.gpu_ids[0])
             # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
-            self.optimizer_G = torch.optim.Adam(self.netG.parameters(), lr=opt.glr, betas=(opt.beta1, opt.beta2))
+            self.optimizer_G = torch.optim.Adam([*self.netG.parameters(), *self.λ_G], lr=opt.glr, betas=(opt.beta1, opt.beta2))
             self.optimizer_D = torch.optim.Adam(self.netD.parameters(), lr=opt.dlr, betas=(opt.beta1, opt.beta2))
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
@@ -102,18 +112,24 @@ class Pix2PixModel(BaseModel):
         # First, G(A) should fake the discriminator
         with torch.cuda.amp.autocast(enabled=self.opt.amp):
             fake_AB = torch.cat((self.real_A, self.fake_B), 1)
-            pred_fake, feats_fake = self.netD(fake_AB, layers=[0, 3, 6, 9])
+            
+            pred_fake, feats_fake = self.netD(fake_AB, layers=self.layers)
             self.loss_G_GAN = self.criterionGAN(pred_fake, True)
             # Second, G(A) = B
-            self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
-            self.loss_G_perceptual = torch.tensor(0, device=self.opt.gpu_ids[0], dtype=torch.float16)
-            if self.opt.lambda_perceptual!=0:
-                feats_real = self.netD(torch.cat((self.real_A, self.real_B), 1).detach(), layers=[0, 3, 6, 9], encode_only=True)
-                for i, λ_i in enumerate([5, 1.5, 1.5, 1]):
-                    self.loss_G_perceptual += λ_i * self.perceptual_loss(feats_fake[i], feats_real[i])
-                self.loss_G_perceptual*=self.opt.lambda_perceptual
+            self.loss_G_L1 = self.l1(self.fake_B, self.real_B)
+            if self.opt.perceptual:
+                self.loss_G_L1 *= self.to_sigma(self.λ_G[0])
+                self.loss_G_perceptual = torch.tensor(0, device=self.opt.gpu_ids[0], dtype=torch.float16)
+                feats_real = self.netD(torch.cat((self.real_A, self.real_B), 1).detach(), layers=self.layers, encode_only=True)
+                for i, λ_i in enumerate(self.λ_G[1:]):
+                    self.loss_G_perceptual += self.to_sigma(λ_i) * self.perceptual_loss(feats_fake[i], feats_real[i])
+                self.loss_G = self.loss_G_GAN + self.loss_G_L1 + self.loss_G_perceptual
+                # Self-learning multitask loss
+                for λ_i in self.λ_G:
+                    self.loss_G +=  λ_i
+            else:
             # combine loss and calculate gradients
-            self.loss_G = self.loss_G_GAN + self.loss_G_L1 + self.loss_G_perceptual
+                self.loss_G = self.loss_G_GAN + self.loss_G_L1 * self.opt.lambda_l1 + self.loss_G_perceptual
         self.scaler.scale(self.loss_G).backward()
 
     def optimize_parameters(self):

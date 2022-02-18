@@ -1,27 +1,23 @@
+from abc import ABC
+from typing import List
 from data.base_dataset import BaseDataset
-from data.image_folder import get_custom_file_paths, natural_sort
 import nibabel as nib
 import random
 from torchvision import transforms
-import os
 import numpy as np
 import torch
 from models.networks import setDimensions
 from data.data_augmentation_3D import ColorJitter3D, PadIfNecessary, SpatialRotation, SpatialFlip, getBetterOrientation, toGrayScale
 
-class brain3DDataset(BaseDataset):
-    def __init__(self, opt):
+class brain3DDataset(BaseDataset, ABC):
+    def __init__(self, opt, A_paths: List[list], B_paths: list):
+        self.A_paths = A_paths
+        self.B_paths = B_paths
         super().__init__(opt)
-        # self.A1_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 't1', opt.phase), 't1.nii.gz'))
-        # self.A2_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 'flair', opt.phase), 'flair.nii.gz'))
-        # self.B_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, 'dir', opt.phase), 'dir.nii.gz'))
-        self.A1_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, f'center_1_2_{opt.phase}'), 't1.nii.gz'))
-        self.A2_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, f'center_1_2_{opt.phase}'), 't2.nii.gz'))
-        self.B_paths = natural_sort(get_custom_file_paths(os.path.join(opt.dataroot, f'center_1_2_{opt.phase}'), 'flair.nii.gz'))
-        self.A_size = len(self.A1_paths)  # get the size of dataset A
-        self.B_size = len(self.B_paths)  # get the size of dataset B
+        self.A_size = len(self.A_paths[0])
+        self.B_size = len(self.B_paths)
         setDimensions(3)
-        opt.input_nc = 2
+        opt.input_nc = len(A_paths)
         opt.output_nc = 1
 
         transformations = [
@@ -44,12 +40,10 @@ class brain3DDataset(BaseDataset):
         self.colorJitter = ColorJitter3D((0.3,1.5), (0.3,1.5))
 
     def __getitem__(self, index):
-        A1_path = self.A1_paths[index % self.A_size]  # make sure index is within then range
-        A1_img: nib.Nifti1Image = nib.load(A1_path)
-        affine = A1_img.affine
+        Ai_paths = [paths[index % self.A_size] for paths in self.A_paths]
+        A_imgs: List[nib.Nifti1Image] = [nib.load(Ai_path) for Ai_path in Ai_paths]
+        affine = A_imgs[0].affine
 
-        A2_path = self.A2_paths[index % self.A_size]  # make sure index is within then range
-        A2_img = nib.load(A2_path)
         if self.opt.paired:   # make sure index is within then range
             index_B = index % self.B_size
             B_path = self.B_paths[index_B]
@@ -58,14 +52,14 @@ class brain3DDataset(BaseDataset):
             index_B = random.randint(0, self.B_size - 1)
             B_path = self.B_paths[index_B]
             B_img = nib.load(B_path)
-        A1 = self.transform(A1_img)
-        A2 = self.transform(A2_img)
+
+        Ai = [self.transform(img) for img in A_imgs]
         if self.opt.phase == 'train':
-            A1 = self.colorJitter(A1)
-            A2 = self.colorJitter(A2, no_update=True)
-        A = torch.concat((A1, A2), dim=0)
+            self.colorJitter.update()
+            Ai = [self.colorJitter(img, no_update=True) for img in Ai]
+        A = torch.concat(Ai, dim=0)
         B = self.transform(B_img)
-        return {'A': A, 'B': B, 'affine': affine, 'axis_code': "IPL", 'A_paths': A1_path, 'B_paths': B_path}
+        return {'A': A, 'B': B, 'affine': affine, 'axis_code': "IPL", 'A_paths': Ai_paths[0], 'B_paths': B_path}
 
     def __len__(self):
         """Return the total number of images in the dataset.
