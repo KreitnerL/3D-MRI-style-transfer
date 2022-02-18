@@ -7,7 +7,8 @@ from torchvision import transforms
 import numpy as np
 import torch
 from models.networks import setDimensions
-from data.data_augmentation_3D import ColorJitter3D, PadIfNecessary, SpatialRotation, SpatialFlip, getBetterOrientation, toGrayScale
+from data.data_augmentation_3D import PadIfNecessary, SpatialRotation, SpatialFlip, getBetterOrientation, toGrayScale
+import torchio as tio
 
 class brain3DDataset(BaseDataset, ABC):
     def __init__(self, opt, A_paths: List[list], B_paths: list):
@@ -30,14 +31,23 @@ class brain3DDataset(BaseDataset, ABC):
             PadIfNecessary(3),
         ]
 
-        if(opt.phase == 'train'):
+        if opt.phase == 'train':
             self.updateTransformations += [
                 SpatialRotation([(1,2), (1,3), (2,3)], [*[0]*12,1,2,3], auto_update=False), # With a probability of approx. 51% no rotation is performed
                 SpatialFlip(dims=(1,2,3), auto_update=False)
             ]
         transformations += self.updateTransformations
         self.transform = transforms.Compose(transformations)
-        self.colorJitter = ColorJitter3D((0.3,1.5), (0.3,1.5))
+        self.styleTransforms = [
+            tio.Lambda(lambda x: x.float()),
+            # tio.transforms.RandomNoise(std=(0,0.02)),
+            tio.RandomGamma(log_gamma=(-0.3, 0.3)),
+            tio.Lambda(lambda x: x.half()),
+        ]
+        if opt.amp:
+            self.styleTransforms.append(tio.Lambda(lambda x: x.half()))
+        self.styleTransforms = tio.Compose(self.styleTransforms)
+        # self.colorJitter = ColorJitter3D((0.3,1.5), (0.3,1.5))
 
     def __getitem__(self, index):
         Ai_paths = [paths[index % self.A_size] for paths in self.A_paths]
@@ -55,8 +65,7 @@ class brain3DDataset(BaseDataset, ABC):
 
         Ai = [self.transform(img) for img in A_imgs]
         if self.opt.phase == 'train':
-            self.colorJitter.update()
-            Ai = [self.colorJitter(img, no_update=True) for img in Ai]
+            Ai = [self.styleTransforms(img) for img in Ai]
         A = torch.concat(Ai, dim=0)
         B = self.transform(B_img)
         return {'A': A, 'B': B, 'affine': affine, 'axis_code': "IPL", 'A_paths': Ai_paths[0], 'B_paths': B_path}
