@@ -78,6 +78,7 @@ class Pix2PixModel(BaseModel):
                 if opt.multitask:
                     self.to_sigma = lambda x: (1/(2*torch.exp(x)))
                     self.λ_G = torch.nn.ParameterList([torch.nn.Parameter(torch.tensor(1./(2*λ_i)).log()) for λ_i in λ_G]).to(device=opt.gpu_ids[0])
+                    self.stats_names.append('λ_G')
                 else:
                     self.to_sigma = lambda x: x
                     self.λ_G = torch.nn.ParameterList([torch.nn.Parameter(torch.tensor(λ_i), requires_grad=False) for λ_i in λ_G]).to(device=opt.gpu_ids[0])

@@ -41,6 +41,9 @@ class BaseModel(ABC):
         self.loss_names = []
         self.model_names = []
         self.visual_names = []
+        self.stats_names = []
+        if opt.confidence is not None:
+            self.stats_names += ['std_max', 'std_mean']
         self.optimizers = []
         self.image_paths = []
         self.metric = 0  # used for learning rate policy 'plateau'
@@ -203,6 +206,8 @@ class BaseModel(ABC):
                     else:
                         visual_ret[name] = [tmp[:,:]]
         if self.opt.confidence is not None:
+            self.std_max = self.std_map.max()
+            self.std_mean = self.std_map.float().mean()
             std_map: torch.Tensor = self.std_map[0:1,0:1]
             if std_map.dim() == 5 and slice:
                 std_maps = []
@@ -233,6 +238,19 @@ class BaseModel(ABC):
                 errors_ret[name] = float(getattr(self, 'loss_' + name).detach().cpu())  # float(...) works for both scalar tensor and float number
         return errors_ret
 
+    def get_current_stats(self):
+        """Return traning losses / errors. train.py will print out these errors on console, and save them to a file"""
+        stats = OrderedDict()
+        for name in self.stats_names:
+            if isinstance(name, str):
+                attr = getattr(self, name)
+                if torch.is_tensor(attr):
+                    stats[name] = float(attr.detach().cpu())  # float(...) works for both scalar tensor and float number
+                else:
+                    for i,a in enumerate(attr):
+                        stats[f'{name}_{i}'] = float(a)
+        return stats
+
     def save_networks(self, epoch):
         """Save all the networks to the disk.
 
@@ -250,6 +268,16 @@ class BaseModel(ABC):
                     net.cuda(self.gpu_ids[0])
                 else:
                     torch.save(net.cpu().state_dict(), save_path)
+        if self.opt.multitask:
+            save_filename = '%s_loss_weights.pth' % (epoch)
+            save_path = os.path.join(self.save_dir, save_filename)
+            net = self.λ_G
+            if len(self.gpu_ids) > 0 and torch.cuda.is_available():
+                torch.save(net.cpu().state_dict(), save_path)
+                net.cuda(self.gpu_ids[0])
+            else:
+                torch.save(net.cpu().state_dict(), save_path)
+
 
     def __patch_instance_norm_state_dict(self, state_dict, module, keys, i=0):
         """Fix InstanceNorm checkpoints incompatibility (prior to 0.4)"""
@@ -294,6 +322,18 @@ class BaseModel(ABC):
                 # for key in list(state_dict.keys()):  # need to copy keys here because we mutate in loop
                 #    self.__patch_instance_norm_state_dict(state_dict, net, key.split('.'))
                 net.load_state_dict(state_dict)
+        if self.isTrain and self.opt.multitask:
+            load_filename = '%s_loss_weights.pth' % (epoch)
+            if self.opt.isTrain and self.opt.pretrained_name is not None:
+                load_dir = os.path.join(self.opt.checkpoints_dir, self.opt.pretrained_name)
+            else:
+                load_dir = self.save_dir
+
+            load_path = os.path.join(load_dir, load_filename)
+            state_dict = torch.load(load_path, map_location=str(self.device))
+            self.λ_G: torch.nn.ParameterList
+            self.λ_G.load_state_dict(state_dict)
+
 
     def print_networks(self, verbose):
         """Print the total number of parameters in the network and (if verbose) network architecture

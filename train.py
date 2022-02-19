@@ -124,6 +124,8 @@ if __name__ == '__main__':
         visualizer.plot_current_validation_losses(epoch, val_loss)
         opt.phase='train'
         opt.serial_batches, opt.paired = tmp
+        stats = model.get_current_stats()
+        visualizer.print_current_stats(stats)
 
         model.save_networks('latest')
         if epoch % opt.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs

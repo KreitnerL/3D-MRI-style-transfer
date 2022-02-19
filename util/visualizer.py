@@ -1,3 +1,4 @@
+from typing import OrderedDict
 import numpy as np
 import os
 import sys
@@ -125,6 +126,8 @@ class Visualizer():
         self.val_loss_log_name = os.path.join(opt.checkpoints_dir, opt.name, 'val_loss_log.csv')
         self.val_loss_header = opt.continue_train
         self.val_plot_name = os.path.join(opt.checkpoints_dir, opt.name, 'val.png')
+        self.stats_log_name = os.path.join(opt.checkpoints_dir, opt.name, 'stats_log.csv')
+        self.stats_header = opt.continue_train
 
 
     def reset(self):
@@ -378,3 +381,14 @@ class Visualizer():
                 writer.writeheader()
                 self.val_loss_header=True
             writer.writerow(row)
+
+    def print_current_stats(self, stats: OrderedDict):
+        if len(stats)==0:
+            return
+        with open(self.stats_log_name, "a") as f:
+             writer = csv.DictWriter(f, fieldnames=list(stats.keys()))
+             if not self.stats_header:
+                f.write('================ Statistics (%s) ================\n' % time.strftime("%c"))
+                writer.writeheader()
+                self.stats_header=True
+             writer.writerow(stats)
