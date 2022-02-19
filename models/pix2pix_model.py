@@ -1,7 +1,8 @@
 import torch
 from .base_model import BaseModel
 from . import networks
-import torchio as tio
+from torchvision.transforms import Compose
+from data.data_augmentation_3D import ColorJitter3D, RandomBiasField, RandomBlur, RandomNoise
 
 
 class Pix2PixModel(BaseModel):
@@ -84,11 +85,11 @@ class Pix2PixModel(BaseModel):
                     self.λ_G = torch.nn.ParameterList([torch.nn.Parameter(torch.tensor(λ_i), requires_grad=False) for λ_i in λ_G]).to(device=opt.gpu_ids[0])
 
             if opt.d_aug:
-                self.d_aug = tio.Compose([
-                    tio.Lambda(lambda x: x.to(device='cpu', dtype=torch.float32)),
-                    tio.transforms.RandomNoise(std=0.02),
-                    tio.RandomGamma(log_gamma=(-0.3, 0.3)),
-                    tio.Lambda(lambda x: x.to(device=opt.gpu_ids[0], dtype=torch.float16 if opt.amp else torch.float32)),
+                self.d_aug = Compose([
+                    RandomNoise(std=(0.02,0.021)),
+                    RandomBiasField([0,0.5]),
+                    RandomBlur([0,2]),
+                    ColorJitter3D(brightness_min_max=(0.7,1.3), contrast_min_max=(0.7,1.3)),
                 ])
             else:
                 self.d_aug = lambda x: x
@@ -108,11 +109,11 @@ class Pix2PixModel(BaseModel):
         """Calculate GAN loss for the discriminator"""
         # Fake; stop backprop to the generator by detaching fake_B
         with torch.cuda.amp.autocast(enabled=self.opt.amp):
-            fake_AB = torch.cat((self.real_A, torch.stack([self.d_aug(x) for x in self.fake_B])), 1)  # we use conditional GANs; we need to feed both input and output to the discriminator
-            pred_fake = self.netD(fake_AB.detach())
+            fake_AB = torch.cat((self.real_A, self.d_aug(self.fake_B.flatten(0,1).detach()).view(self.fake_B.shape)), 1)  # we use conditional GANs; we need to feed both input and output to the discriminator
+            pred_fake = self.netD(fake_AB)
             self.loss_D_fake = self.criterionGAN(pred_fake, False)
             # Real
-            real_AB = torch.cat((self.real_A, torch.stack([self.d_aug(x) for x in self.real_B])), 1)
+            real_AB = torch.cat((self.real_A, self.d_aug(self.real_B.flatten(0,1)).view(self.real_B.shape)), 1)
             pred_real = self.netD(real_AB)
             self.loss_D_real = self.criterionGAN(pred_real, True)
             # combine loss and calculate gradients

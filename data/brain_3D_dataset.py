@@ -7,7 +7,7 @@ from torchvision import transforms
 import numpy as np
 import torch
 from models.networks import setDimensions
-from data.data_augmentation_3D import PadIfNecessary, SpatialRotation, SpatialFlip, getBetterOrientation, toGrayScale
+from data.data_augmentation_3D import *
 import torchio as tio
 
 class brain3DDataset(BaseDataset, ABC):
@@ -33,21 +33,28 @@ class brain3DDataset(BaseDataset, ABC):
 
         if opt.phase == 'train':
             self.updateTransformations += [
-                SpatialRotation([(1,2), (1,3), (2,3)], [*[0]*12,1,2,3], auto_update=False), # With a probability of approx. 51% no rotation is performed
-                SpatialFlip(dims=(1,2,3), auto_update=False)
+                # SpatialRotation([(1,2), (1,3), (2,3)], [*[0]*12,1,2,3], auto_update=False), # With a probability of approx. 51% no rotation is performed
+                # SpatialFlip(dims=(1,2,3), auto_update=False)
             ]
         transformations += self.updateTransformations
         self.transform = transforms.Compose(transformations)
-        self.styleTransforms = [
-            tio.Lambda(lambda x: x.float()),
-            # tio.transforms.RandomNoise(std=(0,0.02)),
-            tio.RandomGamma(log_gamma=(-0.3, 0.3)),
-            tio.Lambda(lambda x: x.half()),
+
+        self.spatialTransforms = [
+            tio.RandomAffine(scales=0.1, degrees=10),
+            tio.Lambda(lambda x: x.to(dtype=torch.float16 if opt.amp else torch.float32)),
         ]
         if opt.amp:
-            self.styleTransforms.append(tio.Lambda(lambda x: x.half()))
-        self.styleTransforms = tio.Compose(self.styleTransforms)
-        # self.colorJitter = ColorJitter3D((0.3,1.5), (0.3,1.5))
+            self.spatialTransforms.append(tio.Lambda(lambda x: x.half()))
+        self.spatialTransforms = tio.Compose(self.spatialTransforms)
+
+        self.styleTransforms = [
+            ColorJitter3D(brightness_min_max=(0.8,1.2), contrast_min_max=(0.8,1.2)),
+            # RandomNoise(std=(0.02,0.021)),
+            # RandomBiasField([0,0.5]),
+            # RandomBlur([0,2]),
+            # ColorJitter3D(brightness_min_max=(0.7,1.3), contrast_min_max=(0.7,1.3)),
+        ]
+        self.styleTransforms = transforms.Compose(self.styleTransforms)
 
     def __getitem__(self, index):
         Ai_paths = [paths[index % self.A_size] for paths in self.A_paths]
@@ -64,10 +71,13 @@ class brain3DDataset(BaseDataset, ABC):
             B_img = nib.load(B_path)
 
         Ai = [self.transform(img) for img in A_imgs]
-        if self.opt.phase == 'train':
-            Ai = [self.styleTransforms(img) for img in Ai]
         A = torch.concat(Ai, dim=0)
         B = self.transform(B_img)
+        if self.opt.phase == 'train':
+            AB = torch.concat((A,B), dim=0)
+            AB = self.spatialTransforms(AB.float())
+            A,B = AB[:len(A)], AB[-1:]
+            A = self.styleTransforms(A)
         return {'A': A, 'B': B, 'affine': affine, 'axis_code': "IPL", 'A_paths': Ai_paths[0], 'B_paths': B_path}
 
     def __len__(self):
@@ -76,4 +86,4 @@ class brain3DDataset(BaseDataset, ABC):
         As we have two datasets with potentially different number of images,
         we take a maximum of
         """
-        return max(self.A_size, self.B_size)
+        return 10#max(self.A_size, self.B_size)
