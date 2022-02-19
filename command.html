@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<meta charset="UTF-8">
+
+<h1>MRI Translation Command Generator </h1>
+
+<form>
+    <h2>Dataset</h2>
+    <label for="brain">BrainT1F2D2</label>
+    <input type="radio" id="brain_3D_t1f2d2" value="brain_3D_t1f2d2" name="dataset" onclick="hideSelector(['#directionDiv'], true)" checked>
+    <label for="brain">BraTS_3D_MICCAI</label>
+    <input type="radio" id="brain_3D_center_MICCAI" value="brain_3D_center_MICCAI" name="dataset" onclick="hideSelector(['#directionDiv'], true)">
+    <label for="brain">super_resolution_MICCAI</label>
+    <input type="radio" id="brain_3D_superRes" value="brain_3D_superRes" name="dataset" onclick="hideSelector(['#directionDiv'], true)">
+    <label for="brain">Spine3D</label>
+    <input type="radio" id="mri_dataset" value="mri_dataset" name="dataset" onclick="hideSelector(['#directionDiv'], false)">
+    <label for="brain">Spine2D</label>
+    <input type="radio" id="image_ct" value="image_ct" name="dataset" onclick="hideSelector(['#directionDiv'], false)">
+
+    <div id="directionDiv" style="display: none; margin-left: 30px;">
+        <h2>Direction</h2>
+        <label for="AtoB">CT to MRI</label>
+        <input type="radio" id="AtoB" value="AtoB" name="direction" checked>
+        <label for="BtoA">MRI to CT</label>
+        <input type="radio" id="BtoA" value="BtoA" name="direction">
+    </div>
+
+    <h2>Model</h2>
+    <label for="pix2pix">Pix2Pix</label>
+    <input type="radio" id="pix2pix" value="pix2pix" name="model" onclick="hideSelector(['#perceptualDiv', '#multitaskDiv', '#daugDiv'], false)" checked>
+    <label for="cut">CUT</label>
+    <input type="radio" id="cut" value="cut" name="model" onclick="hideSelector(['#perceptualDiv', '#multitaskDiv', '#daugDiv'], true)">
+
+    <div id="perceptualDiv" style="margin-left: 30px;">
+        <h2>Perceptual</h2>
+        <label for="perceptual">perceptual</label>
+        <input type="radio" id="perceptual" value="perceptual" name="perceptual" checked>
+        <label for="noperceptual">without perceptual</label>
+        <input type="radio" id="noperceptual" value="noperceptual" name="perceptual">
+    </div>
+    <div id="multitaskDiv" style="margin-left: 30px;">
+        <h2>Multitask</h2>
+        <label for="multitask">multitask</label>
+        <input type="radio" id="perceptual" value="multitask" name="multitask" checked>
+        <label for="nomultitask">fixed weights</label>
+        <input type="radio" id="noperceptual" value="nomultitask" name="multitask">
+    </div>
+    <div id="daugDiv" style="margin-left: 30px;">
+        <h2>Data Aug Discriminator</h2>
+        <label for="daug">Use data augmentation for discriminator</label>
+        <input type="radio" id="perceptual" value="daug" name="daug" checked>
+        <label for="nodaug">No data augmentation for discriminator</label>
+        <input type="radio" id="noperceptual" value="nodaug" name="daug">
+    </div>
+
+    <h2>Network</h2>
+    <label for="sit">SIT</label>
+    <input type="radio" id="sit" value="sit" name="network" onclick="hideSelector(['#confidenceDiv'], false)" checked>
+    <label for="resnet">ResNet</label>
+    <input type="radio" id="resnet" value="resnet" name="network" onclick="hideSelector(['#confidenceDiv'], true)">
+
+    <div id="confidenceDiv" style="margin-left: 30px;">
+        <h2>Perceptual</h2>
+        <label for="bayesian">bayesian</label>
+        <input type="radio" id="bayesian" value="bayesian" name="confidence" checked>
+        <label for="dropout">dropout</label>
+        <input type="radio" id="dropout" value="dropout" name="confidence">
+        <label for="dropout">none</label>
+        <input type="radio" id="none" value="none" name="confidence">
+    </div>
+    
+</form>
+<br><br>
+<textarea style="width: 100%;" type="text" #command id="command" readonly></textarea>
+<button onclick="navigator.clipboard.writeText(document.querySelector('#command').value)">Copy</button>
+
+<script>
+    function generate() {
+        const dataset = document.querySelector('input[name="dataset"]:checked')?.value;
+        const model = document.querySelector('input[name="model"]:checked')?.value;
+        const network = document.querySelector('input[name="network"]:checked')?.value;
+        const direction = document.querySelector('input[name="direction"]:checked')?.value
+        const perceptual = document.querySelector('input[name="perceptual"]:checked')?.value
+        const multitask = document.querySelector('input[name="multitask"]:checked')?.value
+        const daug = document.querySelector('input[name="daug"]:checked')?.value
+        const confidence = document.querySelector('input[name="confidence"]:checked')?.value
+        const utc = new Date().toJSON().slice(0,10).replace(/-/g,'-');
+        const name = `${dataset}_${model}_${perceptual==='perceptual' ? perceptual + '_' : ''}${multitask==='multitask' ? multitask + '_' : ''}${daug==='daug' ? daug + '_' : ''}${network}_${confidence == 'none'? '' : confidence + '_'}${direction}_${utc}`
+
+        let command=`python /home/home/bran_stu/3D-MRI-style-transfer/train.py --name ${name} --amp --output_nc 1 --verbose --netD n_layers --num_threads 0 --ndf 32 --no_antialias --no_antialias_up`
+        
+        switch (dataset) {
+            case 'brain_3D_t1f2d2':
+                command += ' --dataroot /home/home/bran_stu/datasets/BrainT1F2D2 --dataset_mode brain_3D_t1f2d2 --input_nc 2 --batch_size 4'
+                break;
+            case 'brain_3D_center_MICCAI':
+                command += ' --dataroot /home/home/bran_stu/datasets/BraTS_3D_MICCAI --dataset_mode brain_3D_center_MICCAI --input_nc 2 --batch_size 4'
+                break;
+            case 'brain_3D_superRes':
+                command += ' --dataroot /home/home/bran_stu/datasets/super_resolution_MICCAI/philips_1.5T --dataset_mode brain_3D_superRes --input_nc 1 --batch_size 4'
+                break;
+            case 'spine3D':
+                if(model==='pix2pix') {
+                    command += ' --dataroot /home/home/bran_stu/datasets/CT2MRI_wopath --dataset_mode mri --input_nc 1'
+                }
+                else {
+                    command += ' --dataroot /home/home/bran_stu/datasets/TGD --dataset_mode mri --input_nc 1'
+                }
+                if (direction === 'BtoA') {
+                    command += ' --direction BtoA';
+                }
+                break;
+            case 'spine2D':
+                if(model==='pxi2pix') {
+                    command += ' --dataroot TODO --dataset_mode mri --input_nc 1'
+                }
+                else {
+                    command += ' --dataroot /home/home/bran_stu/datasets/TGD_2D --dataset_mode image_ct --input_nc 1'
+                }
+                if (direction === 'BtoA') {
+                    command += ' --direction BtoA';
+                }
+                break;
+            default:
+                break;
+        }
+
+        if (model=="pix2pix") {
+            command += ' --model pix2pix --n_epochs 200 --n_epochs_decay 50'
+            if (perceptual === 'perceptual') {
+                command += ' --perceptual';
+            }
+            if (multitask === 'multitask') {
+                command += ' --multitask';
+            }
+            if (daug === 'daug') {
+                command += ' --d_aug'
+            }
+        } else {
+            command += ' --model cut --n_epochs 400 --n_epochs_decay 100';
+            if(network === 'sit') {
+                command +=  " --nce_layers 0,1,2,3,4";
+            } else {
+                command +=  " --nce_layers 0,4,8,12,16";
+            }
+        }
+
+        if(network === 'sit') {
+            command += ' --netG sit';
+            if(confidence !== 'none') {
+                command += ' --confidence ' + confidence;
+            }
+        } else {
+            command += ' --netG resnet --n_downsampling 1 --ngl 6';
+        }
+
+        command += '  --gpu_ids 0'
+
+        document.querySelector('#command').value = command;
+        console.log('ui')
+    }
+
+    function hideSelector(selectors, hide) {
+        for (const selector of selectors) {
+            document.querySelector(selector).style.display= hide? 'none': 'block';
+        }
+    }
+
+    document.querySelectorAll('input').forEach(element => {
+        element.addEventListener('click', generate)
+    });
+
+    generate()
+</script>
