@@ -86,4 +86,4 @@ class brain3DDataset(BaseDataset, ABC):
         As we have two datasets with potentially different number of images,
         we take a maximum of
         """
-        return 10#max(self.A_size, self.B_size)
+        return max(self.A_size, self.B_size)
