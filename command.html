@@ -6,11 +6,11 @@
 <form>
     <h2>Dataset</h2>
     <label for="brain">BrainT1F2D2</label>
-    <input type="radio" id="brain_3D_t1f2d2" value="brain_3D_t1f2d2" name="dataset" onclick="hideSelector(['#directionDiv'], true)" checked>
+    <input type="radio" id="brain_3D_t1f2d2" value="brain_3D_t1f2d2" name="dataset" onclick="hideSelector(['#directionDiv'], true)">
     <label for="brain">BraTS_3D_MICCAI</label>
     <input type="radio" id="brain_3D_center_MICCAI" value="brain_3D_center_MICCAI" name="dataset" onclick="hideSelector(['#directionDiv'], true)">
     <label for="brain">super_resolution_MICCAI</label>
-    <input type="radio" id="brain_3D_superRes" value="brain_3D_superRes" name="dataset" onclick="hideSelector(['#directionDiv'], true)">
+    <input type="radio" id="brain_3D_superRes" value="brain_3D_superRes" name="dataset" onclick="hideSelector(['#directionDiv'], true)" checked>
     <label for="brain">Spine3D</label>
     <input type="radio" id="mri_dataset" value="mri_dataset" name="dataset" onclick="hideSelector(['#directionDiv'], false)">
     <label for="brain">Spine2D</label>
@@ -33,23 +33,23 @@
     <div id="perceptualDiv" style="margin-left: 30px;">
         <h2>Perceptual</h2>
         <label for="perceptual">perceptual</label>
-        <input type="radio" id="perceptual" value="perceptual" name="perceptual" checked>
+        <input type="radio" id="perceptual" value="perceptual" name="perceptual">
         <label for="noperceptual">without perceptual</label>
-        <input type="radio" id="noperceptual" value="noperceptual" name="perceptual">
+        <input type="radio" id="noperceptual" value="noperceptual" name="perceptual" checked>
     </div>
     <div id="multitaskDiv" style="margin-left: 30px;">
         <h2>Multitask</h2>
         <label for="multitask">multitask</label>
-        <input type="radio" id="perceptual" value="multitask" name="multitask" checked>
+        <input type="radio" id="perceptual" value="multitask" name="multitask">
         <label for="nomultitask">fixed weights</label>
-        <input type="radio" id="noperceptual" value="nomultitask" name="multitask">
+        <input type="radio" id="noperceptual" value="nomultitask" name="multitask" checked>
     </div>
     <div id="daugDiv" style="margin-left: 30px;">
         <h2>Data Aug Discriminator</h2>
         <label for="daug">Use data augmentation for discriminator</label>
-        <input type="radio" id="perceptual" value="daug" name="daug" checked>
+        <input type="radio" id="perceptual" value="daug" name="daug">
         <label for="nodaug">No data augmentation for discriminator</label>
-        <input type="radio" id="noperceptual" value="nodaug" name="daug">
+        <input type="radio" id="noperceptual" value="nodaug" name="daug" checked>
     </div>
 
     <h2>Network</h2>
@@ -59,13 +59,13 @@
     <input type="radio" id="resnet" value="resnet" name="network" onclick="hideSelector(['#confidenceDiv'], true)">
 
     <div id="confidenceDiv" style="margin-left: 30px;">
-        <h2>Perceptual</h2>
+        <h2>Confidence</h2>
         <label for="bayesian">bayesian</label>
-        <input type="radio" id="bayesian" value="bayesian" name="confidence" checked>
+        <input type="radio" id="bayesian" value="bayesian" name="confidence">
         <label for="dropout">dropout</label>
         <input type="radio" id="dropout" value="dropout" name="confidence">
         <label for="dropout">none</label>
-        <input type="radio" id="none" value="none" name="confidence">
+        <input type="radio" id="none" value="none" name="confidence" checked>
     </div>
     
 </form>

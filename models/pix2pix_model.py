@@ -109,11 +109,12 @@ class Pix2PixModel(BaseModel):
         """Calculate GAN loss for the discriminator"""
         # Fake; stop backprop to the generator by detaching fake_B
         with torch.cuda.amp.autocast(enabled=self.opt.amp):
-            fake_AB = torch.cat((self.real_A, self.d_aug(self.fake_B.flatten(0,1).detach()).view(self.fake_B.shape)), 1)  # we use conditional GANs; we need to feed both input and output to the discriminator
+            real_A_augmented = self.d_aug(self.real_A.flatten(0,1)).view(self.fake_B.shape)
+            fake_AB = torch.cat((real_A_augmented, self.d_aug(self.fake_B.flatten(0,1).detach()).view(self.fake_B.shape)), 1)  # we use conditional GANs; we need to feed both input and output to the discriminator
             pred_fake = self.netD(fake_AB)
             self.loss_D_fake = self.criterionGAN(pred_fake, False)
             # Real
-            real_AB = torch.cat((self.real_A, self.d_aug(self.real_B.flatten(0,1)).view(self.real_B.shape)), 1)
+            real_AB = torch.cat((real_A_augmented, self.d_aug(self.real_B.flatten(0,1)).view(self.real_B.shape)), 1)
             pred_real = self.netD(real_AB)
             self.loss_D_real = self.criterionGAN(pred_real, True)
             # combine loss and calculate gradients
