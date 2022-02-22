@@ -1,7 +1,9 @@
 import os
 import torch
+from torchvision import transforms
 from collections import OrderedDict
 from abc import ABC, abstractmethod
+from data.data_augmentation_3D import RandomRotate, RandomScale
 from util.visualizer import Visualizer
 from . import networks
 from util.util import colorFaderTensor, load_loss_log, load_val_log
@@ -49,6 +51,10 @@ class BaseModel(ABC):
         self.metric = 0  # used for learning rate policy 'plateau'
         self.networks = []
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.opt.amp, init_scale=1)
+        self.spatialTransforms = transforms.Compose([
+            RandomRotate(angle=10),
+            RandomScale(scale=0.1)
+        ])
 
     @staticmethod
     def dict_grad_hook_factory(add_func=lambda x: x):
@@ -83,6 +89,11 @@ class BaseModel(ABC):
         AtoB = self.opt.direction == 'AtoB'
         self.real_A = input['A' if AtoB else 'B'].to(self.device)
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
+        if self.isTrain:
+            for i in range(self.real_A.shape[0]):
+                AB = torch.concat((self.real_A[i],self.real_B[i]), dim=0)
+                AB = self.spatialTransforms(AB)
+                self.real_A[i], self.real_B[i] = AB[:len(self.real_A[i])], AB[-1:]
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
         self.registration_artifacts_idx = None
         if 'registration_artifacts_idx' in input:

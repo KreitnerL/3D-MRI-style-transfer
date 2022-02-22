@@ -143,6 +143,85 @@ class ColorJitterSphere3D():
             x = (contrast * x + (1.0 - self.contrast) * mean).float().clamp(0, 1.).to(x.dtype)
         return x
 
+class RandomRotate():
+    def __init__(self, angle=10) -> None:
+        self.angle = angle
+
+    def rotation_matrix(self, axis, theta, device_='cpu'):
+        """
+        Generalized 3d rotation via Euler-Rodriguez formula, https://www.wikiwand.com/en/Euler%E2%80%93Rodrigues_formula
+        Return the rotation matrix associated with counterclockwise rotation about
+        the given axis by theta radians.
+        """
+        axis = axis / torch.sqrt(torch.dot(axis, axis))
+        a = torch.cos(theta / 2.0)
+        b, c, d = -axis * torch.sin(theta / 2.0)
+        aa, bb, cc, dd = a * a, b * b, c * c, d * d
+        bc, ad, ac, ab, bd, cd = b * c, a * d, a * c, a * b, b * d, c * d
+        return torch.tensor([[aa + bb - cc - dd, 2 * (bc + ad), 2 * (bd - ac)],
+            [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
+            [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]], device=device_)
+
+    def get_3d_locations(self, d,h,w,device_):
+        locations_x = torch.linspace(0, w-1, w, device=device_).view(1, 1, 1, w).expand(1, d, h, w)
+        locations_y = torch.linspace(0, h-1, h, device=device_).view(1, 1, h, 1).expand(1, d, h, w)
+        locations_z = torch.linspace(0, d-1,d, device=device_).view(1, d, 1, 1).expand(1, d, h, w)
+        # stack locations
+        locations_3d = torch.stack([locations_x, locations_y, locations_z], dim=4).view(-1, 3, 1)
+        return locations_3d
+
+    def rotate(self, input_tensor: torch.Tensor, rotation_matrix: torch.Tensor) -> torch.Tensor:
+        device_ = input_tensor.device
+        _, d, h, w  = input_tensor.shape
+        input_tensor = input_tensor.unsqueeze(0)
+        # get x,y,z indices of target 3d data
+        locations_3d = self.get_3d_locations(d, h, w, device_)
+        # rotate target positions to the source coordinate
+        rotated_3d_positions = torch.bmm(rotation_matrix.view(1, 3, 3).expand(d*h*w, 3, 3), locations_3d).view(1, d,h,w,3)
+        rot_locs = torch.split(rotated_3d_positions, split_size_or_sections=1, dim=4)
+        # change the range of x,y,z locations to [-1,1]
+        def norm(x: torch.Tensor) -> torch.Tensor:
+            x -= x.min()
+            x -= x.max()/2
+            return x
+        normalised_locs_x = (2.0*rot_locs[0] - (w-1))/(w-1)
+        normalised_locs_y = (2.0*rot_locs[1] - (h-1))/(h-1)
+        normalised_locs_z = (2.0*rot_locs[2] - (d-1))/(d-1)
+        # Recenter grid into FOV
+        normalised_locs_x = norm(normalised_locs_x)
+        normalised_locs_y = norm(normalised_locs_y)
+        normalised_locs_z = norm(normalised_locs_z)
+        grid = torch.stack([normalised_locs_x, normalised_locs_y, normalised_locs_z], dim=4).view(1, d, h, w, 3).to(dtype=input_tensor.dtype)
+        # here we use the destination voxel-positions and sample the input 3d data trilinearly
+        rotated_signal = F.grid_sample(input=input_tensor, grid=grid, align_corners=True)
+        return rotated_signal.squeeze(0)
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        a = torch.FloatTensor(3).uniform_(-self.angle, self.angle).deg2rad()
+        rot = torch.eye(3, device=x.device)
+        for i in range(3):
+            axis = torch.tensor([float(i==j) for j in range(3)])
+            rot = rot.matmul(self.rotation_matrix(axis, a[i], device_=x.device))
+        x = self.rotate(x, rot)
+        return x
+
+class RandomScale():
+    def __init__(self, scale=0.1) -> None:
+        self.scale = scale
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        device_ = x.device
+        _, d, h, w  = x.shape
+        s = torch.FloatTensor(1).uniform_(1-self.scale, 1+self.scale).item()
+        locations_x = torch.linspace(-1, 1, w, device=device_, dtype=x.dtype).view(1, 1, 1, w).expand(1, d, h, w)
+        locations_y = torch.linspace(-1, 1, h, device=device_, dtype=x.dtype).view(1, 1, h, 1).expand(1, d, h, w)
+        locations_z = torch.linspace(-1, 1,d, device=device_, dtype=x.dtype).view(1, d, 1, 1).expand(1, d, h, w)
+        grid = torch.stack([locations_x, locations_y, locations_z], dim=4).view(1, d, h, w, 3)
+        grid *= s
+        x_scaled = F.grid_sample(input=x.unsqueeze(0), grid=grid, align_corners=True).squeeze(0)
+        return x_scaled
+            
+
 class RandomBlur():
     r"""Blur an image using a random-sized Gaussian filter.
 

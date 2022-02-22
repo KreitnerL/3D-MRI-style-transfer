@@ -40,8 +40,8 @@ class brain3DDataset(BaseDataset, ABC):
         self.transform = transforms.Compose(transformations)
 
         self.spatialTransforms = [
-            tio.RandomAffine(scales=0.1, degrees=10),
-            tio.Lambda(lambda x: x.to(dtype=torch.float16 if opt.amp else torch.float32)),
+            # RandomRotate(angle=10),
+            # RandomScale(scale=0.1)
         ]
         if opt.amp:
             self.spatialTransforms.append(tio.Lambda(lambda x: x.half()))
@@ -49,10 +49,6 @@ class brain3DDataset(BaseDataset, ABC):
 
         self.styleTransforms = [
             ColorJitter3D(brightness_min_max=(0.8,1.2), contrast_min_max=(0.8,1.2)),
-            # RandomNoise(std=(0.02,0.021)),
-            # RandomBiasField([0,0.5]),
-            # RandomBlur([0,2]),
-            # ColorJitter3D(brightness_min_max=(0.7,1.3), contrast_min_max=(0.7,1.3)),
         ]
         self.styleTransforms = transforms.Compose(self.styleTransforms)
 
@@ -73,7 +69,7 @@ class brain3DDataset(BaseDataset, ABC):
         Ai = [self.transform(img) for img in A_imgs]
         A = torch.concat(Ai, dim=0)
         B = self.transform(B_img)
-        if self.opt.phase == 'train':
+        if self.opt.phase == 'train' and len(self.spatialTransforms)>0:
             AB = torch.concat((A,B), dim=0)
             AB = self.spatialTransforms(AB.float())
             A,B = AB[:len(A)], AB[-1:]
