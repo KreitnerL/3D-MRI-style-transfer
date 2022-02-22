@@ -5,6 +5,9 @@ import torch
 import models
 import data
 
+import os
+os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
+
 
 class BaseOptions():
     """This class defines options used during both training and test time.

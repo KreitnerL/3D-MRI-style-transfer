@@ -26,30 +26,28 @@
 
     <h2>Model</h2>
     <label for="pix2pix">Pix2Pix</label>
-    <input type="radio" id="pix2pix" value="pix2pix" name="model" onclick="hideSelector(['#perceptualDiv', '#multitaskDiv', '#daugDiv'], false)" checked>
+    <input type="radio" id="pix2pix" value="pix2pix" name="model" onclick="hideSelector(['#perceptualDiv'], false)" checked>
     <label for="cut">CUT</label>
-    <input type="radio" id="cut" value="cut" name="model" onclick="hideSelector(['#perceptualDiv', '#multitaskDiv', '#daugDiv'], true)">
+    <input type="radio" id="cut" value="cut" name="model" onclick="hideSelector(['#perceptualDiv'], true)">
 
     <div id="perceptualDiv" style="margin-left: 30px;">
         <h2>Perceptual</h2>
-        <label for="perceptual">perceptual</label>
-        <input type="radio" id="perceptual" value="perceptual" name="perceptual">
         <label for="noperceptual">without perceptual</label>
-        <input type="radio" id="noperceptual" value="noperceptual" name="perceptual" checked>
-    </div>
-    <div id="multitaskDiv" style="margin-left: 30px;">
-        <h2>Multitask</h2>
-        <label for="multitask">multitask</label>
-        <input type="radio" id="perceptual" value="multitask" name="multitask">
-        <label for="nomultitask">fixed weights</label>
-        <input type="radio" id="noperceptual" value="nomultitask" name="multitask" checked>
-    </div>
-    <div id="daugDiv" style="margin-left: 30px;">
-        <h2>Data Aug Discriminator</h2>
-        <label for="daug">Use data augmentation for discriminator</label>
-        <input type="radio" id="perceptual" value="daug" name="daug">
-        <label for="nodaug">No data augmentation for discriminator</label>
-        <input type="radio" id="noperceptual" value="nodaug" name="daug" checked>
+        <input type="radio" id="noperceptual" value="none" name="perceptual"  onclick="hideSelector(['#multitaskDiv'], true)" checked>
+        <label for="perceptual">perceptual random</label>
+        <input type="radio" id="random" value="random" name="perceptual" onclick="hideSelector(['#multitaskDiv'], false)">
+        <label for="perceptual">perceptual discriminator</label>
+        <input type="radio" id="D" value="D" name="perceptual" onclick="hideSelector(['#multitaskDiv'], false)">
+        <label for="perceptual">perceptual discriminator + augementation</label>
+        <input type="radio" id="D_aug" value="D_aug" name="perceptual" onclick="hideSelector(['#multitaskDiv'], false)">
+        
+        <div id="multitaskDiv" style="display: none; margin-left: 30px;">
+            <h2>Multitask</h2>
+            <label for="multitask">multitask</label>
+            <input type="radio" id="perceptual" value="multitask" name="multitask">
+            <label for="nomultitask">fixed weights</label>
+            <input type="radio" id="noperceptual" value="nomultitask" name="multitask" checked>
+        </div>
     </div>
 
     <h2>Network</h2>
@@ -81,10 +79,9 @@
         const direction = document.querySelector('input[name="direction"]:checked')?.value
         const perceptual = document.querySelector('input[name="perceptual"]:checked')?.value
         const multitask = document.querySelector('input[name="multitask"]:checked')?.value
-        const daug = document.querySelector('input[name="daug"]:checked')?.value
         const confidence = document.querySelector('input[name="confidence"]:checked')?.value
         const utc = new Date().toJSON().slice(0,10).replace(/-/g,'-');
-        const name = `${dataset}_${model}_${perceptual==='perceptual' ? perceptual + '_' : ''}${multitask==='multitask' ? multitask + '_' : ''}${daug==='daug' ? daug + '_' : ''}${network}_${confidence == 'none'? '' : confidence + '_'}${direction}_${utc}`
+        const name = `${dataset}_${model}_${perceptual!=='none' ? 'perceptual_' + perceptual + '_' : ''}${multitask==='multitask' ? multitask + '_' : ''}${network}_${confidence == 'none'? '' : confidence + '_'}${direction}_${utc}`
 
         let command=`python /home/home/bran_stu/3D-MRI-style-transfer/train.py --name ${name} --amp --output_nc 1 --verbose --netD n_layers --num_threads 0 --ndf 32 --no_antialias --no_antialias_up`
         
@@ -125,15 +122,12 @@
         }
 
         if (model=="pix2pix") {
-            command += ' --model pix2pix --n_epochs 200 --n_epochs_decay 50'
-            if (perceptual === 'perceptual') {
-                command += ' --perceptual';
+            command += ' --model pix2pix --n_epochs 150 --n_epochs_decay 50'
+            if (perceptual !== 'none') {
+                command += ' --perceptual ' + perceptual;
             }
             if (multitask === 'multitask') {
                 command += ' --multitask';
-            }
-            if (daug === 'daug') {
-                command += ' --d_aug'
             }
         } else {
             command += ' --model cut --n_epochs 400 --n_epochs_decay 100';
