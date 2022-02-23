@@ -1787,45 +1787,6 @@ class SIT(nn.Module):
             return r_out
         return r_out, feats
 
-#         Parameters:
-#         ----------
-#             - C_out (int): Number of Output channels
-#             - full_res: list
-#         """
-#         super().__init__()
-#         self.C_in, self.C_out = C
-#         self.group_size = 4
-#         self.grid_initialized_with = 0
-#         self.sample_grid = None
-#         self.stride = 2**(stride-1)
-        
-#         # Obelisk N=1 variant offsets: 1x #offsets x1xNx3
-#         self.offset = nn.Parameter(torch.randn(1,K,*[1]*(dimensions-1),dimensions)*0.05)
-
-#         self.conv1 = nn.ModuleList(
-#             conv(K, self.C_out, kernel_size=1) for _ in range(self.C_in // self.group_size)
-#         )
-
-#     def create_grid(self, quarter_res, device):
-#         grid_base = [2,3] if dimensions==2 else [3,4]
-#         # Obelisk sample_grid: 1 x 1 x #samples x 1 x 3
-#         self.sample_grid = F.affine_grid(torch.eye(*grid_base, device=device).unsqueeze(0), torch.Size((1,1,*quarter_res))).view(1,1,-1,*[1]*(dimensions-2),dimensions).detach()
-#         self.sample_grid.requires_grad = False
-#         self.grid_initialized_with = quarter_res
-
-#     def forward(self, x: torch.Tensor):
-#         S = list(torch.tensor(x.shape[2:]) // self.stride)
-#         if self.grid_initialized_with != S:
-#             self.create_grid(S, x.device)
-#         B = x.size()[0]
-
-#         # Obelisk Layer
-#         y = 0
-#         for i in range(self.C_in):
-#             feature_map = F.grid_sample(x[:,i:i+1], (self.sample_grid.repeat(B,1,*[1]*dimensions) + self.offset), align_corners=True).view(B,-1,*S)
-#             y = y + self.conv1[i//self.group_size](feature_map)
-#         return y
-
 class DSNetBlock(nn.Module):
     def __init__(self, block: nn.Module, norm: nn.Module, C: int, skip = True):
         super().__init__()

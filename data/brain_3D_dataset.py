@@ -43,8 +43,6 @@ class brain3DDataset(BaseDataset, ABC):
             # RandomRotate(angle=10),
             # RandomScale(scale=0.1)
         ]
-        if opt.amp:
-            self.spatialTransforms.append(tio.Lambda(lambda x: x.half()))
         self.spatialTransforms = tio.Compose(self.spatialTransforms)
 
         self.styleTransforms = [

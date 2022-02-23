@@ -90,10 +90,10 @@ class BaseModel(ABC):
         self.real_A = input['A' if AtoB else 'B'].to(self.device)
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
         if self.isTrain:
-            for i in range(self.real_A.shape[0]):
-                AB = torch.concat((self.real_A[i],self.real_B[i]), dim=0)
-                AB = self.spatialTransforms(AB)
-                self.real_A[i], self.real_B[i] = AB[:len(self.real_A[i])], AB[-1:]
+            num_a = self.real_A.shape[0]*self.real_A.shape[1]
+            AB = torch.concat((self.real_A.flatten(0,1),self.real_B.flatten(0,1)), dim=0)
+            AB = self.spatialTransforms(AB).view(AB.shape)
+            self.real_A, self.real_B = AB[:num_a].view(self.real_A.shape), AB[num_a:].view(self.real_B.shape)
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
         self.registration_artifacts_idx = None
         if 'registration_artifacts_idx' in input:
