@@ -23,6 +23,18 @@ _single = _ntuple(1)
 _pair = _ntuple(2)
 _triple = _ntuple(3)
 
+def kl_divergence_from_nn(model: nn.Module):
+
+    """
+    Gathers the KL Divergence from a nn.Module object
+    Works by gathering each Bayesian layer kl divergence and summing it, doing nothing with the non Bayesian ones
+    """
+    kl_divergence = 0
+    for module in model.modules():
+        if isinstance(module, (BayesianModule)):
+            kl_divergence += module.log_variational_posterior - module.log_prior
+    return kl_divergence
+
 def _output_padding(output_padding: List[int], input: Tensor, output_size: Optional[List[int]],
                         stride: List[int], padding: List[int], kernel_size: List[int],
                         dilation: Optional[List[int]] = None) -> List[int]:

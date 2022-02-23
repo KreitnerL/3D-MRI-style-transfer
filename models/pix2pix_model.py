@@ -1,4 +1,5 @@
 import torch
+from models.bayesian import kl_divergence_from_nn
 from .base_model import BaseModel
 from . import networks
 from torchvision.transforms import Compose
@@ -157,7 +158,11 @@ class Pix2PixModel(BaseModel):
             else:
                 self.loss_G_L1 *= self.opt.lambda_L1
                 self.loss_G = self.loss_G_GAN + self.loss_G_L1
-        self.scaler.scale(self.loss_G).backward()
+            if self.opt.confidence == 'bayesian':
+                self.kl_divergence = kl_divergence_from_nn(self.netG)
+                self.scaler.scale(self.loss_G + self.kl_divergence).backward()
+            else:
+                self.scaler.scale(self.loss_G).backward()
 
     def optimize_parameters(self):
         with torch.cuda.amp.autocast(enabled=self.opt.amp):

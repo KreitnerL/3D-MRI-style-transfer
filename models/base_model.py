@@ -46,6 +46,8 @@ class BaseModel(ABC):
         self.stats_names = []
         if opt.confidence is not None:
             self.stats_names += ['std_max', 'std_mean']
+            if opt.confidence =='bayesian':
+                self.stats_names.append('kl_divergence')
         self.optimizers = []
         self.image_paths = []
         self.metric = 0  # used for learning rate policy 'plateau'
@@ -89,7 +91,7 @@ class BaseModel(ABC):
         AtoB = self.opt.direction == 'AtoB'
         self.real_A = input['A' if AtoB else 'B'].to(self.device)
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
-        if self.isTrain:
+        if self.opt.phase == 'train':
             num_a = self.real_A.shape[0]*self.real_A.shape[1]
             AB = torch.concat((self.real_A.flatten(0,1),self.real_B.flatten(0,1)), dim=0)
             AB = self.spatialTransforms(AB).view(AB.shape)
@@ -177,6 +179,8 @@ class BaseModel(ABC):
                     preds = torch.stack(preds)
                     self.fake_B = preds.mean(axis=0)
                     self.std_map = preds.std(axis=0).detach().cpu()
+                    self.std_max = self.std_map.max()
+                    self.std_mean = self.std_map.float().mean()
             self.compute_visuals()
 
     def compute_visuals(self):
@@ -217,8 +221,6 @@ class BaseModel(ABC):
                     else:
                         visual_ret[name] = [tmp[:,:]]
         if self.opt.confidence is not None:
-            self.std_max = self.std_map.max()
-            self.std_mean = self.std_map.float().mean()
             std_map: torch.Tensor = self.std_map[0:1,0:1]
             if std_map.dim() == 5 and slice:
                 std_maps = []
