@@ -50,12 +50,12 @@ class Pix2PixModel(BaseModel):
         BaseModel.__init__(self, opt)
         # specify the training losses you want to print out. The training/test scripts will call <BaseModel.get_current_losses>
         self.loss_names = ['G_GAN', 'G_L1', 'D_real', 'D_fake']
-        if opt.perceptual is not None:
-            self.loss_names.append('G_perceptual')
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
         self.visual_names = ['real_A', 'fake_B', 'real_B']
         # specify the models you want to save to the disk. The training/test scripts will call <BaseModel.save_networks> and <BaseModel.load_networks>
         if self.isTrain:
+            if opt.perceptual is not None:
+                self.loss_names.append('G_perceptual')
             self.model_names = ['G', 'D']
         else:  # during test time, only load G
             self.model_names = ['G']
@@ -92,9 +92,9 @@ class Pix2PixModel(BaseModel):
 
             if opt.perceptual == 'd_aug':
                 self.d_aug = Compose([
-                    RandomNoise(std=(0.02,0.021)),
+                    RandomNoise(std=(0.,0.02)),
                     RandomBiasField([0,0.5]),
-                    RandomBlur([0,2]),
+                    # RandomBlur([0,2]),
                     ColorJitter3D(brightness_min_max=(0.7,1.3), contrast_min_max=(0.7,1.3)),
                 ])
             else:

@@ -173,7 +173,7 @@ class BaseModel(ABC):
                 self.forward()
                 if self.opt.confidence is not None:
                     preds = [self.fake_B]
-                    for i in range(10 - 1):
+                    for i in range(self.opt.inference_samples - 1):
                         self.forward()
                         preds.append(self.fake_B)
                     preds = torch.stack(preds)

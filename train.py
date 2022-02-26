@@ -7,6 +7,7 @@ from models import create_model
 from util.ssim import SSIM
 from util.util import PSNR
 from util.visualizer import Visualizer
+from numpy import mean
 
 
 if __name__ == '__main__':
@@ -22,6 +23,7 @@ if __name__ == '__main__':
     test_dataset = create_dataset(opt)
     test_dataset_iter = iter(test_dataset)  # create a dataset given opt.dataset_mode and other options
     opt.phase='train'
+    test_dataset_size = len(test_dataset)
 
     model = create_model(opt)      # create a model given opt.model and other options
     print('The number of training images = %d' % dataset_size)
@@ -108,7 +110,7 @@ if __name__ == '__main__':
         tmp = opt.serial_batches, opt.paired
         opt.serial_batches=True
         opt.paired = True
-        for i in tqdm(range(len(test_dataset) // opt.batch_size), desc='(epoch %d) Validation'%epoch):
+        for i in tqdm(range(test_dataset_size // opt.batch_size), desc='(epoch %d) Validation'%epoch):
             test_data = next(test_dataset_iter, None)
             if test_data is None:
                 test_dataset_iter = iter(test_dataset)
@@ -117,8 +119,13 @@ if __name__ == '__main__':
             model.set_input(test_data)
             model.test()
             for label, fun in validation_functions.items():
-                val_loss[label] = fun(model.fake_B, model.real_B).mean().item()
-        
+                if label in val_loss:
+                    val_loss[label].append(fun(model.fake_B, model.real_B).mean().item() * model.fake_B.shape[0])
+                else:
+                    val_loss[label] = [fun(model.fake_B, model.real_B).mean().item() * model.fake_B.shape[0]]
+        for label, vals in val_loss.items():
+            val_loss[label] = sum(vals) / test_dataset_size
+
         # val_loss = {'L1': np.mean(validation_loss_array), '1-SSIM': np.mean(validation_loss_array2)}
         visualizer.print_validation_loss(epoch, val_loss)
         visualizer.plot_current_validation_losses(epoch, val_loss)

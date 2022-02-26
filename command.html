@@ -83,7 +83,7 @@
         const utc = new Date().toJSON().slice(0,10).replace(/-/g,'-');
         const name = `${dataset}_${model}_${perceptual!=='none' ? 'perceptual_' + perceptual + '_' : ''}${multitask==='multitask' ? multitask + '_' : ''}${network}_${confidence == 'none'? '' : confidence + '_'}${direction}_${utc}`
 
-        let command=`python /home/home/bran_stu/3D-MRI-style-transfer/train.py --name ${name} --amp --output_nc 1 --verbose --netD n_layers --num_threads 0 --ndf 32 --no_antialias --no_antialias_up`
+        let command=`python /home/home/bran_stu/3D-MRI-style-transfer/train.py --name ${name} --amp --output_nc 1 --verbose --netD n_layers --num_threads 4 --ndf 32 --no_antialias --no_antialias_up`
         
         switch (dataset) {
             case 'brain_3D_t1f2d2':
