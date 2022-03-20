@@ -11,10 +11,11 @@ from data.data_augmentation_3D import *
 import torchio as tio
 
 class brain3DDataset(BaseDataset, ABC):
-    def __init__(self, opt, A_paths: List[list], B_paths: list):
+    def __init__(self, opt, A_paths: List[list], B_paths: list, seg_paths: list = None):
+        super().__init__(opt)
         self.A_paths = A_paths
         self.B_paths = B_paths
-        super().__init__(opt)
+        self.seg_path = seg_paths
         self.A_size = len(self.A_paths[0])
         self.B_size = len(self.B_paths)
         setDimensions(3)
@@ -67,11 +68,17 @@ class brain3DDataset(BaseDataset, ABC):
         Ai = [self.transform(img) for img in A_imgs]
         A = torch.concat(Ai, dim=0)
         B = self.transform(B_img)
+        seg = None
         if self.opt.phase == 'train' and len(self.spatialTransforms)>0:
             AB = torch.concat((A,B), dim=0)
             AB = self.spatialTransforms(AB.float())
             A,B = AB[:len(A)], AB[-1:]
             A = self.styleTransforms(A)
+        if self.opt.load_seg:
+            seg_path = self.seg_path[index_B]
+            seg = nib.load(seg_path)
+            seg = self.transform(seg)
+            return {'A': A, 'B': B, 'seg': seg, 'affine': affine, 'axis_code': "IPL", 'A_paths': Ai_paths[0], 'B_paths': B_path}
         return {'A': A, 'B': B, 'affine': affine, 'axis_code': "IPL", 'A_paths': Ai_paths[0], 'B_paths': B_path}
 
     def __len__(self):

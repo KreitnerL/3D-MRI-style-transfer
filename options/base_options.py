@@ -69,6 +69,7 @@ class BaseOptions():
         parser.add_argument('--display_winsize', type=int, default=256, help='display window size for both visdom and HTML')
         parser.add_argument('--random_scale_max', type=float, default=3.0,
                             help='(used for single image translation) Randomly scale the image by the specified factor as data augmentation.')
+        parser.add_argument('--load_seg', action='store_true', default=False, help='If set, load segmentation map')
         # additional parameters
         parser.add_argument('--epoch', type=str, default='latest', help='which epoch to load? set to latest to use latest cached model')
         parser.add_argument('--verbose', action='store_true', help='if specified, print more debugging information')

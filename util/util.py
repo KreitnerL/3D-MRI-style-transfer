@@ -325,15 +325,16 @@ class NCC(torch.nn.Module):
         return ncc
 
 class PSNR(torch.nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, div=100) -> None:
         super().__init__()
+        self.div = div
 
     def forward(self, src: torch.Tensor, trg: torch.Tensor) -> torch.Tensor:
         src = src.float().flatten(1)
         trg = trg.float().flatten(1)
         mse = ((src - trg) ** 2).mean(1)
         if mse.max() == 0:
-            return 100
+            return 100 / self.div
         psnr = 10 * torch.log10(1. / mse)
-        return psnr / 100
+        return psnr / self.div
         

@@ -100,6 +100,9 @@ class BaseModel(ABC):
         self.registration_artifacts_idx = None
         if 'registration_artifacts_idx' in input:
             self.registration_artifacts_idx = input['registration_artifacts_idx']
+        self.seg = None
+        if self.opt.load_seg:
+            self.seg = input['seg']
 
     @abstractmethod
     def forward(self):
