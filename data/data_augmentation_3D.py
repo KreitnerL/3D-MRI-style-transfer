@@ -7,6 +7,7 @@ import nibabel as nib
 import numpy as np
 import torch
 import numbers
+from torchvision.transforms.functional import rotate as rotate2D
 
 class SpatialRotation():
     def __init__(self, dimensions: Sequence, k: Sequence = [3], auto_update=True):
@@ -90,7 +91,7 @@ class ColorJitter3D():
         if self.brightness_min_max:
             x = (self.brightness * x).float().clamp(0, 1.).to(x.dtype)
         if self.contrast_min_max:
-            mean = torch.mean(x.float(), dim=(-4, -3, -2, -1), keepdim=True)
+            mean = torch.mean(x.float(), dim=list(range(-x.dim(),0)), keepdim=True)
             x = (self.contrast * x + (1.0 - self.contrast) * mean).float().clamp(0, 1.).to(x.dtype)
         return x
 
@@ -197,12 +198,17 @@ class RandomRotate():
         return rotated_signal.squeeze(0)
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        a = torch.FloatTensor(3).uniform_(-self.angle, self.angle).deg2rad()
-        rot = torch.eye(3, device=x.device)
-        for i in range(3):
-            axis = torch.tensor([float(i==j) for j in range(3)])
-            rot = rot.matmul(self.rotation_matrix(axis, a[i], device_=x.device))
-        x = self.rotate(x, rot)
+        dim = x[0].dim()
+        if dim == 2:
+            a = torch.FloatTensor(1).uniform_(-self.angle, self.angle)
+            x = rotate2D(x.float(), a.item()).to(dtype=x.dtype)
+        else:
+            a = torch.FloatTensor(3).uniform_(-self.angle, self.angle).deg2rad()
+            rot = torch.eye(3, device=x.device)
+            for i in range(3):
+                axis = torch.tensor([float(i==j) for j in range(3)])
+                rot = rot.matmul(self.rotation_matrix(axis, a[i], device_=x.device))
+            x = self.rotate(x, rot)
         return x
 
 class RandomScale():
@@ -211,15 +217,16 @@ class RandomScale():
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
         device_ = x.device
-        _, d, h, w  = x.shape
+        dims = x.shape[1:]
+        dim = len(dims)
         s = torch.FloatTensor(1).uniform_(1-self.scale, 1+self.scale).item()
-        locations_x = torch.linspace(-1, 1, w, device=device_, dtype=x.dtype).view(1, 1, 1, w).expand(1, d, h, w)
-        locations_y = torch.linspace(-1, 1, h, device=device_, dtype=x.dtype).view(1, 1, h, 1).expand(1, d, h, w)
-        locations_z = torch.linspace(-1, 1,d, device=device_, dtype=x.dtype).view(1, d, 1, 1).expand(1, d, h, w)
-        grid = torch.stack([locations_x, locations_y, locations_z], dim=4).view(1, d, h, w, 3)
+        locations = []
+        for i,d in enumerate(dims):
+            locations.append(torch.linspace(-1, 1, d, device=device_).view(*[1]*(i+1), d, *[1]*(dim-i-1)).expand(1, *dims))
+        grid = torch.stack(locations, dim=dim+1).view(1, *dims, dim)
         grid *= s
-        x_scaled = F.grid_sample(input=x.unsqueeze(0), grid=grid, align_corners=True).squeeze(0)
-        return x_scaled
+        x_scaled = F.grid_sample(input=x.unsqueeze(0).float(), grid=grid, align_corners=True).squeeze(0)
+        return x_scaled.to(dtype=x.dtype)
             
 
 class RandomBlur():
@@ -275,9 +282,13 @@ class RandomBlur():
         dtype = x.dtype
         if x.device.type=='cpu':
             x = x.float()
-        kernel = self.createKernel(x.shape[0], sigma=std, kernel_size=3, dim=3).to(device=x.device, dtype=x.dtype)
-        x = F.conv3d(x.unsqueeze(0), weight=kernel, groups=x.shape[0]).squeeze(0)
-        x = F.pad(x, [1,1]*3, mode='reflect')
+        dim = x[0].dim()
+        kernel = self.createKernel(x.shape[0], sigma=std, kernel_size=3, dim=dim).to(device=x.device, dtype=x.dtype)
+        if dim == 2:
+            x = F.conv2d(x.unsqueeze(0), weight=kernel, groups=x.shape[0]).squeeze(0)
+        else:
+            x = F.conv3d(x.unsqueeze(0), weight=kernel, groups=x.shape[0]).squeeze(0)
+        x = F.pad(x, [1,1]*dim, mode='reflect')
         return x.type(dtype)
 
 class RandomNoise():
@@ -374,21 +385,34 @@ class RandomBiasField():
             mesh_max = meshes[i].max()
             if mesh_max > 0:
                 meshes[i] = meshes[i] / mesh_max
-        x_mesh, y_mesh, z_mesh = meshes
-
-        i = 0
-        for x_order in range(order + 1):
-            for y_order in range(order + 1 - x_order):
-                for z_order in range(order + 1 - (x_order + y_order)):
+        if len(meshes) == 2:
+            x_mesh, y_mesh = meshes
+            i = 0
+            for x_order in range(order + 1):
+                for y_order in range(order + 1 - x_order):
                     coefficient = coefficients[i]
                     new_map = (
                         coefficient
                         * x_mesh ** x_order
                         * y_mesh ** y_order
-                        * z_mesh ** z_order
                     )
                     bias_field += new_map
                     i += 1
+        else:
+            x_mesh, y_mesh, z_mesh = meshes
+            i = 0
+            for x_order in range(order + 1):
+                for y_order in range(order + 1 - x_order):
+                    for z_order in range(order + 1 - (x_order + y_order)):
+                        coefficient = coefficients[i]
+                        new_map = (
+                            coefficient
+                            * x_mesh ** x_order
+                            * y_mesh ** y_order
+                            * z_mesh ** z_order
+                        )
+                        bias_field += new_map
+                        i += 1
         bias_field = 1./torch.exp(bias_field)
         return bias_field
 

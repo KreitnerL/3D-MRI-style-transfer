@@ -6,7 +6,7 @@ from torchvision import transforms
 import os
 import torch
 import numpy as np
-from data.data_augmentation_3D import PadIfNecessary, SpatialFlip, SpatialRotation, ColorJitterSphere3D, toGrayScale
+from data.data_augmentation_3D import PadIfNecessary, SpatialRotation, toGrayScale, ColorJitter3D, RandomBiasField, RandomBlur, RandomNoise
 from models.networks import setDimensions
 
 class ImageCTDataset(BaseDataset):
@@ -25,17 +25,19 @@ class ImageCTDataset(BaseDataset):
             transforms.ToTensor(),
             transforms.Lambda(lambda x: x.type(torch.float16 if opt.amp else torch.float32)),
             SpatialRotation([(1,2)]),
-            PadIfNecessary(3),
+            PadIfNecessary(3)
         ]
 
-        if(opt.phase == 'train'):
-            self.updateTransformations += [
-                SpatialRotation([(1,2)], [*[0]*3,1,2,3], auto_update=False),
-                SpatialFlip(dims=(1,2), auto_update=False),
-            ]
-            self.transformations += self.updateTransformations
+        self.styleTransforms = [
+            RandomNoise(std=(0., 0.02)),
+            RandomBiasField([0, 0.4]),
+            RandomBlur([0, 0.5]),
+            ColorJitter3D(brightness_min_max=(0.9, 1.1), contrast_min_max=(0.9, 1.1)),
+        ]
+        self.styleTransforms = transforms.Compose(self.styleTransforms)
+
         self.transform = transforms.Compose(self.transformations)
-        self.colorJitter = ColorJitterSphere3D((0.3, 1.5), (0.3,1.5), sigma=0.5, dims=2)
+        # self.colorJitter = ColorJitterSphere3D((0.3, 1.5), (0.3,1.5), sigma=0.5, dims=2)
 
     def center(self, x, mean, std):
         return (x - mean) / std
@@ -67,9 +69,9 @@ class ImageCTDataset(BaseDataset):
             A = self.transform(A_img)
             B = self.transform(B_img)
         if self.opt.phase == 'train' and self.opt.direction=='AtoB':
-            A = self.colorJitter(A)
+            A = self.styleTransforms(A)
         data = {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path}
-        if self.surpress_registration_artifacts and self.opt.direction=="AtoB":
+        if self.surpress_registration_artifacts and self.opt.direction=="AtoB" and self.opt.phase == 'train':
             data['registration_artifacts_idx'] = registration_artifacts_idx
         return data
 
