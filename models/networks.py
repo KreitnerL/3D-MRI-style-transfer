@@ -1744,6 +1744,9 @@ class SIT(nn.Module):
                     )
                 )
         self.out = nn.Sequential(
+            conv(8, 8, 3, padding=1),
+            norm_layer(8),
+            nn.ReLU(True),
             conv(8, C_out, 3, padding=1),
             nn.Sigmoid())
 

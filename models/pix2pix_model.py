@@ -37,7 +37,6 @@ class Pix2PixModel(BaseModel):
             parser.set_defaults(pool_size=0, gan_mode='lsgan', paired=True)
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
             parser.add_argument('--perceptual', type=str, default=None, choices=['random', 'D', 'D_aug'], help="Use perceptual loss")
-            parser.add_argument('--multitask',  action='store_true', default=False, help="If set learn the weights of the multi-task loss automatically")
 
         return parser
 

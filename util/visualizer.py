@@ -46,7 +46,7 @@ def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256):
         else:
             image_name = f'{label}/{name}_{label}.png'
             save_path = os.path.join(image_dir, image_name)
-            v = util.tensor2im(v)
+            v = util.tensor2im(im_data[0])
             util.save_image(v, save_path, aspect_ratio=aspect_ratio)
         ims.append(image_name)
         txts.append(label)

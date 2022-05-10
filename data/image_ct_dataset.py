@@ -18,10 +18,11 @@ class ImageCTDataset(BaseDataset):
         self.B_paths = natural_sort(get_custom_file_paths(os.path.join(self.opt.dataroot, 'ct', self.opt.phase), '.png'))
         self.A_size = len(self.A_paths)  # get the size of dataset A
         self.B_size = len(self.B_paths)  # get the size of dataset B
-        self.surpress_registration_artifacts = True
+        self.surpress_registration_artifacts = False
 
         self.transformations = [
-            transforms.Lambda(lambda x: toGrayScale(x)),
+            # transforms.Lambda(lambda x: toGrayScale(x)),
+            transforms.Lambda(lambda x: x / 255.),
             transforms.ToTensor(),
             transforms.Lambda(lambda x: x.type(torch.float16 if opt.amp else torch.float32)),
             SpatialRotation([(1,2)]),
